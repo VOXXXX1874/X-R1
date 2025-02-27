@@ -1,0 +1,1 @@
+/bin/bash: /research/d2/spc/zzchen2/anaconda/envs/xr1/lib/libtinfo.so.6: no version information available (required by /bin/bash)

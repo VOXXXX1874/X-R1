@@ -8,10 +8,7 @@ from latex2sympy2_extended import NormalizationConfig
 from math_verify import LatexExtractionConfig, parse, verify
 
 # Initialize OpenAI client
-client = OpenAI(
-    api_key="",
-    base_url=""
-)
+client = None
 
 def normalize_text(text):
     """Normalize text by removing extra whitespace, converting to lowercase."""

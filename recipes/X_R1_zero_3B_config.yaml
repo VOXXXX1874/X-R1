@@ -9,7 +9,7 @@ torch_dtype: bfloat16
 attn_implementation: flash_attention_2
 
 # Data training arguments
-dataset_name: xiaodongguaAIGC/X-R1-750
+dataset_name: xiaodongguaAIGC/X-R1-7500
 dataset_configs:
 - train
 num_processes: 3
@@ -36,7 +36,7 @@ max_prompt_length: 256
 num_generations: 6
 max_completion_length: 1024
 max_steps: -1
-num_train_epochs: 3
+num_train_epochs: 2
 output_dir: output/X-R1-3B
 overwrite_output_dir: true
 per_device_eval_batch_size: 1

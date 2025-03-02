@@ -69,7 +69,7 @@ if is_wandb_available():
 RewardFunc = Union[str, PreTrainedModel, Callable[[list, list], list[float]]]
 
 
-class XGRPOTrainer(GRPOTrainer):
+class XGRPOPlusTrainer(GRPOTrainer):
     # base trl GRPO_trainer
 
 
@@ -630,13 +630,11 @@ class XGRPOTrainer(GRPOTrainer):
             self.accelerator.process_index * len(inputs['prompt_ids']),
             (self.accelerator.process_index + 1) * len(inputs['prompt_ids']),
         )
-        per_token_kl = per_token_kl[process_slice].unsqueeze(1)
-        print('per_token_kl:', per_token_kl)
+        per_token_kl = per_token_kl[process_slice]
 
         # x - x.detach() allows for preserving gradients from x
         advantages = inputs["advantages"]
-        per_token_loss = (per_token_ps / per_token_ps.detach()) * advantages.unsqueeze(1)
-        per_token_loss = -(per_token_loss - self.beta * per_token_kl)
+        per_token_loss = - (per_token_ps / per_token_ps.detach()) * (advantages - self.beta * per_token_kl).unsqueeze(1)
         loss = (per_token_loss * completion_mask).sum() / completion_mask.sum()
         # loss = ((per_token_loss * completion_mask).sum(dim=1) / completion_mask.sum(dim=1)).mean()
 
@@ -644,7 +642,6 @@ class XGRPOTrainer(GRPOTrainer):
         completion_length = self.accelerator.gather_for_metrics(completion_mask.sum(1)).float().mean().item()
         self._metrics["completion_length"].append(completion_length)
 
-        mean_kl = ((per_token_kl * completion_mask).sum(dim=1) / completion_mask.sum(dim=1)).mean()
-        self._metrics["kl"].append(self.accelerator.gather_for_metrics(mean_kl).mean().item())
+        self._metrics["kl"].append(per_token_kl_mean)
 
         return loss

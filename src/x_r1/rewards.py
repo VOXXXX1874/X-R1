@@ -6,6 +6,7 @@ import os
 from openai import OpenAI
 from latex2sympy2_extended import NormalizationConfig
 from math_verify import LatexExtractionConfig, parse, verify
+import math
 
 # Initialize OpenAI client
 client = None
@@ -25,7 +26,7 @@ def extract_answer(text):
     match = re.search(r'<answer>(.*?)</answer>', text, re.DOTALL)
     if match:
         return match.group(1).strip()
-    return text.strip()
+    return ""
 
 def evaluate_answer_similarity(answer, solution):
     """Use GPT4O-mini to evaluate answer similarity."""
@@ -66,23 +67,9 @@ def accuracy_reward(completions, solution, **kwargs):
             # print('latex gold parsed')
             # We require the answer to be provided in correct latex (no malformed operators)
             answer_parsed = parse(
-                content,
-                extraction_config=[
-                    LatexExtractionConfig(
-                        normalization_config=NormalizationConfig(
-                            nits=False,
-                            malformed_operators=False,
-                            basic_latex=True,
-                            equations=True,
-                            boxed="all",
-                            units=True,
-                        ),
-                        # Ensures that boxed is tried first
-                        boxed_match_priority=0,
-                        try_extract_without_anchor=False,
-                    )
-                ],
+                '$'+extract_answer(content)+'$',
                 extraction_mode="first_match",
+                extraction_config=[LatexExtractionConfig()],
             )
             # Reward 1 if the content is the same as the ground truth, 0 otherwise
             reward = float(verify(answer_parsed, gold_parsed))
@@ -112,23 +99,9 @@ def accuracy_answer_reward(completion, answer, **kwargs):
     gold_parsed = answer
     if len(gold_parsed) != 0:
         answer_parsed = parse(
-            completion,
-            extraction_config=[
-                LatexExtractionConfig(
-                    normalization_config=NormalizationConfig(
-                        nits=False,
-                        malformed_operators=False,
-                        basic_latex=True,
-                        equations=True,
-                        boxed="all",
-                        units=True,
-                    ),
-                    # Ensures that boxed is tried first
-                    boxed_match_priority=0,
-                    try_extract_without_anchor=False,
-                )
-            ],
+            '$'+extract_answer(completion)+'$',
             extraction_mode="first_match",
+            extraction_config=[LatexExtractionConfig()],
         )
         reward = float(verify(answer_parsed, gold_parsed))
         print('-'*100)

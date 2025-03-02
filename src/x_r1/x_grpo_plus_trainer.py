@@ -385,18 +385,44 @@ class XGRPOTrainer(GRPOTrainer):
             if is_peft_model(unwrapped_model):
                 unwrapped_model.unmerge_adapter()
 
-
     # Get the per-token log probabilities for the completions for the model and the reference model
-    def _get_per_token_logps(self, model, input_ids, attention_mask, logits_to_keep):
+    def _get_per_token_ps(self, model, input_ids, attention_mask, logits_to_keep):
         # We add 1 to `logits_to_keep` because the last logits of the sequence is later excluded
         logits = model(input_ids=input_ids, attention_mask=attention_mask, logits_to_keep=logits_to_keep + 1).logits
         logits = logits[:, :-1, :]  # (B, L-1, V), exclude the last logit: it corresponds to the next token pred
 
-        input_ids = input_ids[:, -logits_to_keep:]
         # For transformers<=4.48, logits_to_keep argument isn't supported, so here we drop logits ourselves.
         # See https://github.com/huggingface/trl/issues/2770
         logits = logits[:, -logits_to_keep:]
-        return selective_log_softmax(logits, input_ids)  #  compute logprobs for the input tokens
+        return torch.softmax(logits, dim=-1) # compute probs for the input tokens
+
+    # Get the per-token log probabilities for the completions for the model and the reference model
+    def _get_per_token_ps_and_kl_divergence(self, model, input_ids, attention_mask, logits_to_keep):
+        # ref_model per_token_probs
+        with torch.inference_mode():
+            # 如果是peft, base参数共享
+            # base 作为 ref model
+            # base + Lora 作为 policy model
+            if self.ref_model is not None:
+                print('is not peft')
+                ref_per_token_ps = self._get_per_token_ps(
+                    self.ref_model, input_ids, attention_mask, logits_to_keep
+                )
+            else:
+                print('is peft')
+                with self.accelerator.unwrap_model(self.model).disable_adapter():
+                    ref_per_token_ps = self._get_per_token_ps(
+                        self.model, input_ids, attention_mask, logits_to_keep
+                    )
+
+        # model per_token_probs
+        model_per_token_ps = self._get_per_token_ps(model, input_ids, attention_mask, logits_to_keep)
+        model_per_token_ps_detach = model_per_token_ps.detach()
+        
+        # Calculate the KL divergence
+        input_ids = input_ids[:, -logits_to_keep:]
+        kl_divergence = torch.mean(torch.sum(model_per_token_ps_detach * torch.log(model_per_token_ps_detach / ref_per_token_ps), dim=-1), dim=-1)
+        return kl_divergence, torch.gather(model_per_token_ps, -1, input_ids.unsqueeze(-1)).squeeze(-1)
 
     def _prepare_inputs(self, inputs: dict[str, Union[torch.Tensor, Any]]) -> dict[str, Union[torch.Tensor, Any]]:
         device = self.accelerator.device
@@ -486,22 +512,6 @@ class XGRPOTrainer(GRPOTrainer):
 
         logits_to_keep = completion_ids.size(1)  # we only need to compute the logits for the completion tokens
 
-        with torch.inference_mode():
-            # 如果是peft, base参数共享
-            # base 作为 ref model
-            # base + Lora 作为 policy model
-            if self.ref_model is not None:
-                print('is not peft')
-                ref_per_token_logps = self._get_per_token_logps(
-                    self.ref_model, prompt_completion_ids, attention_mask, logits_to_keep
-                )
-            else:
-                print('is peft')
-                with self.accelerator.unwrap_model(self.model).disable_adapter():
-                    ref_per_token_logps = self._get_per_token_logps(
-                        self.model, prompt_completion_ids, attention_mask, logits_to_keep
-                    )
-
         # Decode the generated completions
         completions_text = self.processing_class.batch_decode(completion_ids, skip_special_tokens=True)
         if is_conversational(inputs[0]):
@@ -550,9 +560,7 @@ class XGRPOTrainer(GRPOTrainer):
         # Normalize the rewards to compute the advantages
         mean_grouped_rewards = mean_grouped_rewards.repeat_interleave(self.num_generations, dim=0)
         std_grouped_rewards = std_grouped_rewards.repeat_interleave(self.num_generations, dim=0)
-        advantages = (rewards - mean_grouped_rewards) / (std_grouped_rewards + 1e-4)
-
-        print('advantage:', advantages)
+        advantages = (rewards - mean_grouped_rewards)
 
         # Slice to keep only the local part of the data
         process_slice = slice(
@@ -599,7 +607,6 @@ class XGRPOTrainer(GRPOTrainer):
             "prompt_mask": prompt_mask,
             "completion_ids": completion_ids,
             "completion_mask": completion_mask,
-            "ref_per_token_logps": ref_per_token_logps,
             "advantages": advantages,
         }
 
@@ -615,15 +622,20 @@ class XGRPOTrainer(GRPOTrainer):
         attention_mask = torch.cat([prompt_mask, completion_mask], dim=1)
         logits_to_keep = completion_ids.size(1)  # we only need to compute the logits for the completion tokens
 
-        per_token_logps = self._get_per_token_logps(model, input_ids, attention_mask, logits_to_keep)
-
-        # Compute the KL divergence between the model and the reference model
-        ref_per_token_logps = inputs["ref_per_token_logps"]
-        per_token_kl = torch.exp(ref_per_token_logps - per_token_logps) - (ref_per_token_logps - per_token_logps) - 1
+        per_token_kl_per_func, per_token_ps = self._get_per_token_ps_and_kl_divergence(model, input_ids, attention_mask, logits_to_keep)
+        per_token_kl_per_func = gather(per_token_kl_per_func)
+        per_token_kl_mean = torch.mean(per_token_kl_per_func)
+        per_token_kl = per_token_kl_per_func - per_token_kl_mean
+        process_slice = slice(
+            self.accelerator.process_index * len(inputs['prompt_ids']),
+            (self.accelerator.process_index + 1) * len(inputs['prompt_ids']),
+        )
+        per_token_kl = per_token_kl[process_slice].unsqueeze(1)
+        print('per_token_kl:', per_token_kl)
 
         # x - x.detach() allows for preserving gradients from x
         advantages = inputs["advantages"]
-        per_token_loss = torch.exp(per_token_logps - per_token_logps.detach()) * advantages.unsqueeze(1)
+        per_token_loss = (per_token_ps / per_token_ps.detach()) * advantages.unsqueeze(1)
         per_token_loss = -(per_token_loss - self.beta * per_token_kl)
         loss = (per_token_loss * completion_mask).sum() / completion_mask.sum()
         # loss = ((per_token_loss * completion_mask).sum(dim=1) / completion_mask.sum(dim=1)).mean()

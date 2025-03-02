@@ -36,7 +36,7 @@ max_prompt_length: 256
 num_generations: 6
 max_completion_length: 1024
 max_steps: -1
-num_train_epochs: 2
+num_train_epochs: 1
 output_dir: output/X-R1-3B
 overwrite_output_dir: true
 per_device_eval_batch_size: 1

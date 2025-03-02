@@ -37,6 +37,7 @@ from rewards import (
 )
 from utils.callbacks import get_callbacks
 from x_grpo_trainer import XGRPOTrainer
+from x_grpo_plus_trainer import XGRPOPlusTrainer
 from trl import ModelConfig, ScriptArguments, TrlParser, get_peft_config
 from peft import LoraConfig, PeftModel, get_peft_model
 
@@ -214,7 +215,7 @@ def main(script_args, training_args, model_args):
     #############################
     # Initialize the XGRPO trainer
     #############################
-    trainer = XGRPOTrainer(
+    trainer = XGRPOPlusTrainer(
         model=model_args.model_name_or_path,
         # model = model,
         reward_funcs=reward_funcs,

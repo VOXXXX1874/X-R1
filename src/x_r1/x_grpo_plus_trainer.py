@@ -419,9 +419,14 @@ class XGRPOPlusTrainer(GRPOTrainer):
         model_per_token_ps = self._get_per_token_ps(model, input_ids, attention_mask, logits_to_keep)
         model_per_token_ps_detach = model_per_token_ps.detach()
         
+        model_per_token_ps_detach = model_per_token_ps_detach.clamp(min=1e-9)
+        ref_per_token_ps = ref_per_token_ps.clamp(min=1e-9)
+        model_per_token_ps_detach = model_per_token_ps_detach / model_per_token_ps_detach.sum(dim=-1, keepdim=True)
+        ref_per_token_ps = ref_per_token_ps / ref_per_token_ps.sum(dim=-1, keepdim=True)
+
         # Calculate the KL divergence
         input_ids = input_ids[:, -logits_to_keep:]
-        kl_divergence = torch.mean(torch.sum(model_per_token_ps_detach * torch.log(model_per_token_ps_detach / ref_per_token_ps), dim=-1), dim=-1)
+        kl_divergence = torch.mean(torch.sum(model_per_token_ps_detach * torch.log(model_per_token_ps_detach/ ref_per_token_ps), dim=-1), dim=-1)
         return kl_divergence, torch.gather(model_per_token_ps, -1, input_ids.unsqueeze(-1)).squeeze(-1)
 
     def _prepare_inputs(self, inputs: dict[str, Union[torch.Tensor, Any]]) -> dict[str, Union[torch.Tensor, Any]]:

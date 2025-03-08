@@ -38,6 +38,7 @@ from rewards import (
 from utils.callbacks import get_callbacks
 from x_grpo_trainer import XGRPOTrainer
 from x_grpo_plus_trainer import XGRPOPlusTrainer
+from x_grpo_supervised_trainer import XGRPOSupervisedTrainer
 from trl import ModelConfig, ScriptArguments, TrlParser, get_peft_config
 from peft import LoraConfig, PeftModel, get_peft_model
 
@@ -95,6 +96,15 @@ class GRPOScriptArguments(ScriptArguments):
         default=-1.0,
         metadata={"help": "Maximum (negative) penalty for for repetition penalty reward"},
     )
+    reference_model: str = field(
+        default=None,
+        metadata={"help": "Reference model for grpo algorithm"},
+    )
+    trainer_type: str = field(
+        default="XGRPOTrainer",
+        metadata={"help": "Type of trainer to use"},
+    )
+    
 
 
 
@@ -153,6 +163,20 @@ def main(script_args, training_args, model_args):
             "Open-ended Verifiable Question": "problem",
             "Ground-True Answer": "solution"
         })
+
+    # if DeepScaleR-Preview-Dataset in the name of the dataset, then we need to remove the solution column and rename answer column to solution
+    if "DeepScaleR-Preview-Dataset" in script_args.dataset_name:
+        dataset = dataset.remove_columns("solution")
+        dataset = dataset.rename_columns({"answer": "solution"})
+
+        def make_latex(example):
+            example["solution"] = '$' + example["solution"] + '$'
+            return example
+        
+        dataset = dataset.map(make_latex)
+
+    # display one example from the dataset
+    print(dataset[script_args.dataset_train_split][0])
 
     # Get reward functions
     REWARD_FUNCS_REGISTRY = {
@@ -215,27 +239,42 @@ def main(script_args, training_args, model_args):
     #############################
     # Initialize the XGRPO trainer
     #############################
-    #trainer = XGRPOPlusTrainer(
-    #    model=model_args.model_name_or_path,
-    #    # model = model,
-    #    reward_funcs=reward_funcs,
-    #    args=training_args,
-    #    train_dataset=dataset[script_args.dataset_train_split],
-    #    eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
-    #    peft_config=get_peft_config(model_args), # LoRA parameter
-    #    callbacks=get_callbacks(training_args, model_args),
-    #)
-
-    trainer = XGRPOTrainer(
-        model=model_args.model_name_or_path,
-        # model = model,
-        reward_funcs=reward_funcs,
-        args=training_args,
-        train_dataset=dataset[script_args.dataset_train_split],
-        eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
-        peft_config=get_peft_config(model_args), # LoRA parameter
-        callbacks=get_callbacks(training_args, model_args),
-    )
+    if script_args.trainer_type == "XGRPOTrainer":
+        trainer = XGRPOTrainer(
+            model=model_args.model_name_or_path,
+            # model = model,
+            reward_funcs=reward_funcs,
+            args=training_args,
+            train_dataset=dataset[script_args.dataset_train_split],
+            eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
+            peft_config=get_peft_config(model_args), # LoRA parameter
+            callbacks=get_callbacks(training_args, model_args),
+        )
+    elif script_args.trainer_type == "XGRPOPlusTrainer":
+        trainer = XGRPOPlusTrainer(
+            model=model_args.model_name_or_path,
+            # model = model,
+            reward_funcs=reward_funcs,
+            args=training_args,
+            train_dataset=dataset[script_args.dataset_train_split],
+            eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
+            peft_config=get_peft_config(model_args), # LoRA parameter
+            callbacks=get_callbacks(training_args, model_args),
+        )
+    elif script_args.trainer_type == "XGRPOSupervisedTrainer":
+        trainer = XGRPOSupervisedTrainer(
+            model=model_args.model_name_or_path,
+            reference_model=script_args.reference_model,
+            # model = model,
+            reward_funcs=reward_funcs,
+            args=training_args,
+            train_dataset=dataset[script_args.dataset_train_split],
+            eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
+            peft_config=get_peft_config(model_args), # LoRA parameter
+            callbacks=get_callbacks(training_args, model_args),
+        )
+    else:
+        raise ValueError(f"Invalid trainer type: {script_args.trainer_type}")
 
     print(trainer)
 

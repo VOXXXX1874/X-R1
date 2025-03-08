@@ -419,9 +419,14 @@ class XGRPOPlusTrainer(GRPOTrainer):
         model_per_token_ps = self._get_per_token_ps(model, input_ids, attention_mask, logits_to_keep)
         model_per_token_ps_detach = model_per_token_ps.detach()
         
+        model_per_token_ps_detach = model_per_token_ps_detach.clamp(min=1e-9)
+        ref_per_token_ps = ref_per_token_ps.clamp(min=1e-9)
+        model_per_token_ps_detach = model_per_token_ps_detach / model_per_token_ps_detach.sum(dim=-1, keepdim=True)
+        ref_per_token_ps = ref_per_token_ps / ref_per_token_ps.sum(dim=-1, keepdim=True)
+
         # Calculate the KL divergence
         input_ids = input_ids[:, -logits_to_keep:]
-        kl_divergence = torch.mean(torch.sum(model_per_token_ps_detach * torch.log(model_per_token_ps_detach / ref_per_token_ps), dim=-1), dim=-1)
+        kl_divergence = torch.sum(model_per_token_ps_detach * torch.log(model_per_token_ps_detach/ ref_per_token_ps), dim=-1)
         return kl_divergence, torch.gather(model_per_token_ps, -1, input_ids.unsqueeze(-1)).squeeze(-1)
 
     def _prepare_inputs(self, inputs: dict[str, Union[torch.Tensor, Any]]) -> dict[str, Union[torch.Tensor, Any]]:
@@ -569,8 +574,6 @@ class XGRPOPlusTrainer(GRPOTrainer):
         )
         advantages = advantages[process_slice]
 
-        print('advantage:', advantages)
-
         # Log the metrics
         reward_per_func = rewards_per_func.mean(0)
         for i, reward_func in enumerate(self.reward_funcs):
@@ -623,18 +626,12 @@ class XGRPOPlusTrainer(GRPOTrainer):
         logits_to_keep = completion_ids.size(1)  # we only need to compute the logits for the completion tokens
 
         per_token_kl_per_func, per_token_ps = self._get_per_token_ps_and_kl_divergence(model, input_ids, attention_mask, logits_to_keep)
-        per_token_kl_per_func = gather(per_token_kl_per_func)
-        per_token_kl_mean = torch.mean(per_token_kl_per_func)
+        per_token_kl_mean = torch.mean(gather(torch.mean(per_token_kl_per_func)))
+        
         per_token_kl = per_token_kl_per_func - per_token_kl_mean
-        process_slice = slice(
-            self.accelerator.process_index * len(inputs['prompt_ids']),
-            (self.accelerator.process_index + 1) * len(inputs['prompt_ids']),
-        )
-        per_token_kl = per_token_kl[process_slice]
-
         # x - x.detach() allows for preserving gradients from x
         advantages = inputs["advantages"]
-        per_token_loss = - (per_token_ps / per_token_ps.detach()) * (advantages - self.beta * per_token_kl).unsqueeze(1)
+        per_token_loss = - (per_token_ps / per_token_ps.detach()) * (advantages.unsqueeze(1) - self.beta * per_token_kl)
         loss = (per_token_loss * completion_mask).sum() / completion_mask.sum()
         # loss = ((per_token_loss * completion_mask).sum(dim=1) / completion_mask.sum(dim=1)).mean()
 

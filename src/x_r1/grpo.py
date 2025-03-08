@@ -215,7 +215,18 @@ def main(script_args, training_args, model_args):
     #############################
     # Initialize the XGRPO trainer
     #############################
-    trainer = XGRPOPlusTrainer(
+    #trainer = XGRPOPlusTrainer(
+    #    model=model_args.model_name_or_path,
+    #    # model = model,
+    #    reward_funcs=reward_funcs,
+    #    args=training_args,
+    #    train_dataset=dataset[script_args.dataset_train_split],
+    #    eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
+    #    peft_config=get_peft_config(model_args), # LoRA parameter
+    #    callbacks=get_callbacks(training_args, model_args),
+    #)
+
+    trainer = XGRPOTrainer(
         model=model_args.model_name_or_path,
         # model = model,
         reward_funcs=reward_funcs,

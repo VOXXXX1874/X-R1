@@ -1,0 +1,27 @@
+To find the minimum possible value of \((a+b+c+d)^2 + (e+f+g+h)^2\) where \(a, b, c, d, e, f, g,\) and \(h\) are distinct elements from the set \(\{-7, -5, -3, -2, 2, 4, 6, 13\}\), we start by noting that each term must be minimized independently.
+
+Firstly, let's minimize \((a+b+c+d)^2\). The smallest values for four distinct numbers from our set are \( -7, -5, -3, -2 \):
+\[
+-7 + (-5) + (-3) + (-2) = -17.
+\]
+Thus,
+\[
+(a+b+c+d)^2 = (-17)^2 = 289.
+\]
+
+Next, we need to minimize \((e+f+g+h)^2\). To achieve this, we should select the next smallest values from the set: \(2, 4, 6, 13\).
+\[
+2 + 4 + 6 + 13 = 25.
+\]
+Therefore,
+\[
+(e+f+g+h)^2 = 25^2 = 625.
+\]
+
+Now, combining these results:
+\[
+(a+b+c+d)^2 + (e+f+g+h)^2 = 289 + 625 = 914.
+\]
+
+Hence, the minimum possible value is 
+\boxed{914}.

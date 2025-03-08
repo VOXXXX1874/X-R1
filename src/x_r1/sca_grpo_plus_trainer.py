@@ -14,11 +14,7 @@
 '''https://github.com/dhcode-cpp/X-R1'''
 '''modify to print online sampling string'''
 
-import os
-import textwrap
-import warnings
-from collections import defaultdict
-from typing import Any, Callable, Optional, Sized, Union
+from typing import Any, Callable, Union
 from unittest.mock import patch
 
 import torch
@@ -27,42 +23,22 @@ import torch.nn as nn
 import transformers
 from accelerate.utils import broadcast_object_list, gather, gather_object, is_peft_model, set_seed
 from accelerate.utils.other import is_compiled_module
-from datasets import Dataset, IterableDataset
-from packaging import version
 from torch import nn
-from torch.utils.data import Sampler
 from transformers import (
-    AutoModelForCausalLM,
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    GenerationConfig,
     PreTrainedModel,
-    PreTrainedTokenizerBase,
     Trainer,
-    TrainerCallback,
     is_wandb_available,
 )
 from transformers.integrations.deepspeed import is_deepspeed_zero3_enabled
 from transformers.utils import is_peft_available
 from x_grpo_plus_trainer import XGRPOPlusTrainer
 from trl.data_utils import apply_chat_template, is_conversational, maybe_apply_chat_template
-from trl.models import create_reference_model, prepare_deepspeed, unwrap_model_for_generation
+from trl.models import unwrap_model_for_generation
 from trl.import_utils import is_vllm_available
-from trl.trainer.callbacks import SyncRefModelCallback
-from trl.trainer.grpo_config import GRPOConfig
-from trl.trainer.utils import  pad, selective_log_softmax
-
-if is_peft_available():
-    from peft import PeftConfig, get_peft_model
-
-if is_vllm_available():
-    from vllm import LLM, SamplingParams
+from trl.trainer.utils import  pad
 
 if is_wandb_available():
     import wandb
-
-
-
 
 # What we call a reward function is a callable that takes a list of prompts and completions and returns a list of
 # rewards. When it's a string, it's a model ID, so it's loaded as a pretrained model.

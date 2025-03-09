@@ -7,8 +7,4 @@
 #SBATCH -p jcheng_gpu_72h
 #SBATCH -c 24
 
-ACCELERATE_LOG_LEVEL=info accelerate launch \
---config_file recipes/zero3.yaml \
---num_processes=3 src/x_r1/grpo.py \
---config recipes/X_R1_3B_config.yaml \
-> ./output/x_r1_3B_sampling.log 2>&1
+ACCELERATE_LOG_LEVEL=info accelerate launch --config_file recipes/zero3.yaml --num_processes=3 src/x_r1/grpo.py --config recipes/X_R1_3B_supervised_1dot5B_config.yaml > ./output/X_R1_3B_supervised_1dot5B.log 2>&1

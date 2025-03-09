@@ -52,7 +52,7 @@ def evaluate_answer_similarity(answer, solution):
         # If API call fails, fall back to simple text matching
         return 1.0 if normalize_text(answer) == normalize_text(solution) else 0.0
 
-def accuracy_reward(completions, solution, **kwargs):
+def accuracy_reward(completions, solution, silence=False, **kwargs):
     """Reward function that checks if the completion is the same as the ground truth."""
     contents = [completion[0]["content"] for completion in completions]
     rewards = []
@@ -74,19 +74,21 @@ def accuracy_reward(completions, solution, **kwargs):
             # Reward 1 if the content is the same as the ground truth, 0 otherwise
             reward = float(verify(answer_parsed, gold_parsed))
             # print('\nprompt:', prompt)
-            print('-'*100)
-            print('\nanswer_parsed:', answer_parsed, '\ngold_parsed:', gold_parsed, '\nreward:', reward)
+            if not silence:
+                print('-'*100)
+                print('\nanswer_parsed:', answer_parsed, '\ngold_parsed:', gold_parsed, '\nreward:', reward)
         else:
             # For medical text answers, extract from <answer> tags and use GPT4O-mini for evaluation
             answer_content = extract_answer(content)
             normalized_content = normalize_text(answer_content)
             normalized_solution = normalize_text(sol)
             reward = evaluate_answer_similarity(normalized_content, normalized_solution)
-            print('-'*100)
-            print('\nanswer_parsed:', normalized_content, '\ngold_parsed:', normalized_solution, '\nreward:', reward)
+            if not silence:
+                print('-'*100)
+                print('\nanswer_parsed:', normalized_content, '\ngold_parsed:', normalized_solution, '\nreward:', reward)
         rewards.append(reward)
-
-    print('\naccuracy rewards:', rewards)
+    if not silence:
+        print('\naccuracy rewards:', rewards)
 
     return rewards
 
@@ -109,15 +111,16 @@ def accuracy_answer_reward(completion, answer, **kwargs):
     return reward
 
 
-def format_reward(completions, **kwargs):
+def format_reward(completions, silence=False, **kwargs):
     """Reward function that checks if the completion has a specific format."""
     pattern = r"^<think>.*?</think><answer>.*?</answer>$"
     completion_contents = [completion[0]["content"] for completion in completions]
     matches = [re.match(pattern, content) for content in completion_contents]
 
     rewards = [1.0 if match else 0.0 for match in matches]
-    print('-'*100)
-    print('\nformat rewards:', rewards)
+    if not silence:
+        print('-'*100)
+        print('\nformat rewards:', rewards)
     return rewards
 
 

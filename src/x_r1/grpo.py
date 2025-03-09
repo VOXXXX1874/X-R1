@@ -166,6 +166,9 @@ def main(script_args, training_args, model_args):
 
     # if DeepScaleR-Preview-Dataset in the name of the dataset, then we need to remove the solution column and rename answer column to solution
     if "DeepScaleR-Preview-Dataset" in script_args.dataset_name:
+        # Take half of the dataset
+        dataset[script_args.dataset_train_split] = dataset[script_args.dataset_train_split].select(range(len(dataset[script_args.dataset_train_split])//2))
+
         dataset = dataset.remove_columns("solution")
         dataset = dataset.rename_columns({"answer": "solution"})
 

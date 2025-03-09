@@ -62,7 +62,7 @@ if is_vllm_available():
 if is_wandb_available():
     import wandb
 
-
+import random
 
 
 # What we call a reward function is a callable that takes a list of prompts and completions and returns a list of
@@ -89,6 +89,7 @@ class XGRPOSupervisedTrainer(XGRPOTrainer):
         callbacks: Optional[list[TrainerCallback]] = None,
         optimizers: tuple[Optional[torch.optim.Optimizer], Optional[torch.optim.lr_scheduler.LambdaLR]] = (None, None),
         peft_config: Optional["PeftConfig"] = None,
+        quick_eval_dataset: Optional[Union[Dataset, IterableDataset]] = None,
     ):
         # Args
         if args is None:
@@ -312,6 +313,7 @@ class XGRPOSupervisedTrainer(XGRPOTrainer):
                         enable_prefix_caching=True,
                         max_model_len=self.args.vllm_max_model_len,
                     )
+                print('Temperature is:', args.temperature)
                 self.sampling_params = SamplingParams(
                     temperature=args.temperature,
                     max_tokens=self.max_completion_length,
@@ -353,6 +355,16 @@ class XGRPOSupervisedTrainer(XGRPOTrainer):
             if isinstance(reward_func, PreTrainedModel):
                 self.reward_funcs[i] = self.accelerator.prepare_model(reward_func, evaluation_mode=True)
 
+        # quick eval dataset
+        if quick_eval_dataset is not None:
+            def make_prompt(example):
+                example['prompt'] = apply_chat_template(example, self.processing_class)["prompt"]
+                return example
+            
+            self.quick_eval_dataset = quick_eval_dataset.map(make_prompt)
+        else:
+            self.quick_eval_dataset = None
+
 
     def _prepare_inputs(self, inputs: dict[str, Union[torch.Tensor, Any]]) -> dict[str, Union[torch.Tensor, Any]]:
         device = self.accelerator.device
@@ -380,6 +392,35 @@ class XGRPOSupervisedTrainer(XGRPOTrainer):
             all_prompts_text = gather_object(prompts_text)
             if self.accelerator.is_main_process:
                 outputs = self.llm.generate(all_prompts_text, sampling_params=self.sampling_params, use_tqdm=False)
+
+                # perform quick eval with the quick eval dataset if step is a multiple of eval_steps
+                if self.quick_eval_dataset is not None and self.state.global_step % self.args.eval_steps == 0:
+                    quick_eval_outputs = self.llm.generate(
+                        [x["prompt"] for x in self.quick_eval_dataset],
+                        sampling_params=self.sampling_params,
+                        use_tqdm=False,
+                    )
+                    quick_eval_completion_ids = [out.token_ids for completions in quick_eval_outputs for out in completions.outputs]
+                    quick_eval_output_strings = self.processing_class.batch_decode(quick_eval_completion_ids, skip_special_tokens=True)
+                    print('-'*100)
+                    print('One response from test dataset:', quick_eval_output_strings[random.randint(0, len(quick_eval_output_strings)-1)])
+                    print('-'*100)
+                    quick_eval_completions = []
+                    for completion in quick_eval_output_strings:
+                        quick_eval_completions.append([{"role": "assistant", "content": completion}])
+                    # calculate the reward for quick_eval_outputs
+                    quick_eval_rewards = torch.zeros(len(self.quick_eval_dataset), len(self.reward_funcs), device=device)
+                    for i, reward_func in enumerate(self.reward_funcs):
+                        if isinstance(reward_func, nn.Module):
+                            print('Ignore the reward model')
+                        else:
+                            # Repeat all input columns (but "prompt" and "completion") to match the number of generations
+                            reward_kwargs = {'solution': [example['solution'] for example in self.quick_eval_dataset]}
+                            output_reward_func = reward_func(completions=quick_eval_completions, silence = True, **reward_kwargs)
+                            quick_eval_rewards[:, i] = torch.tensor(output_reward_func, dtype=torch.float32, device=device)
+                            # write the reward to the metrics
+                            self._metrics[f"quick_eval_rewards/{reward_func.__name__}"].append(quick_eval_rewards[:, i].mean().item())
+
                 completion_ids = [out.token_ids for completions in outputs for out in completions.outputs]
                 for output in outputs:
                     print('-'*100)

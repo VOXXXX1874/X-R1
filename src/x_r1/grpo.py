@@ -104,8 +104,24 @@ class GRPOScriptArguments(ScriptArguments):
         default="XGRPOTrainer",
         metadata={"help": "Type of trainer to use"},
     )
+    quick_eval_dataset: str = field(
+        default=None,
+        metadata={"help": "Quick evaluation dataset"},
+    )
     
+def make_latex(example):
+    example["solution"] = '$' + str(example["solution"]) + '$'
+    return example
 
+
+# Format into conversation
+def make_conversation(example):
+    return {
+        "prompt": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": example["problem"]},
+        ],
+    }
 
 
 SYSTEM_PROMPT = (
@@ -157,6 +173,32 @@ def main(script_args, training_args, model_args):
     # Load the dataset
     dataset = load_dataset(script_args.dataset_name, name=script_args.dataset_config)
 
+    if script_args.quick_eval_dataset:
+        if script_args.quick_eval_dataset == "Maxwell-Jia/AIME_2024":
+            quick_eval_dataset = load_dataset(script_args.quick_eval_dataset, name=script_args.dataset_config)
+            quick_eval_dataset = quick_eval_dataset.remove_columns("Solution")
+            quick_eval_dataset = quick_eval_dataset.remove_columns("ID")
+            quick_eval_dataset = quick_eval_dataset.rename_column("Answer", "solution")
+            quick_eval_dataset = quick_eval_dataset.rename_column("Problem", "problem")
+            quick_eval_dataset = quick_eval_dataset.map(make_latex)
+            quick_eval_dataset = quick_eval_dataset.map(make_conversation)
+            quick_eval_dataset = quick_eval_dataset['train']
+            # display one example from the dataset
+            print('Example from quick_eval_dataset:', quick_eval_dataset[0])
+        elif script_args.quick_eval_dataset == "HuggingFaceH4/MATH-500":
+            quick_eval_dataset = load_dataset(script_args.quick_eval_dataset, name=script_args.dataset_config)
+            quick_eval_dataset['test'] = quick_eval_dataset['test'].select(range(50))
+            quick_eval_dataset = quick_eval_dataset.remove_columns("solution")
+            quick_eval_dataset = quick_eval_dataset.rename_column("answer", "solution")
+            quick_eval_dataset = quick_eval_dataset.map(make_latex)
+            quick_eval_dataset = quick_eval_dataset.map(make_conversation)
+            quick_eval_dataset = quick_eval_dataset['test']
+            # display one example from the dataset
+            print('Example from quick_eval_dataset:', quick_eval_dataset[0])
+        else:
+            raise ValueError(f"Invalid quick eval dataset: {script_args.quick_eval_dataset}")
+
+
     # align the dataset
     if script_args.dataset_name == "FreedomIntelligence/medical-o1-verifiable-problem":
         dataset = dataset.rename_columns({
@@ -171,15 +213,8 @@ def main(script_args, training_args, model_args):
 
         dataset = dataset.remove_columns("solution")
         dataset = dataset.rename_columns({"answer": "solution"})
-
-        def make_latex(example):
-            example["solution"] = '$' + example["solution"] + '$'
-            return example
         
         dataset = dataset.map(make_latex)
-
-    # display one example from the dataset
-    print(dataset[script_args.dataset_train_split][0])
 
     # Get reward functions
     REWARD_FUNCS_REGISTRY = {
@@ -201,14 +236,7 @@ def main(script_args, training_args, model_args):
     }
     reward_funcs = [REWARD_FUNCS_REGISTRY[func] for func in script_args.reward_funcs]
 
-    # Format into conversation
-    def make_conversation(example):
-        return {
-            "prompt": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": example["problem"]},
-            ],
-        }
+
 
     dataset = dataset.map(make_conversation)
     for split in dataset:
@@ -275,6 +303,7 @@ def main(script_args, training_args, model_args):
             eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
             peft_config=get_peft_config(model_args), # LoRA parameter
             callbacks=get_callbacks(training_args, model_args),
+            quick_eval_dataset=quick_eval_dataset if script_args.quick_eval_dataset else None,
         )
     else:
         raise ValueError(f"Invalid trainer type: {script_args.trainer_type}")

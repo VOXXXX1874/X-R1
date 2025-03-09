@@ -10,19 +10,22 @@ attn_implementation: flash_attention_2
 reference_model: Qwen/Qwen2.5-7B-Instruct
 
 # Data training arguments
-dataset_name: agentica-org/DeepScaleR-Preview-Dataset
+dataset_name: xiaodongguaAIGC/X-R1-750
 dataset_configs:
 - train
 num_processes: 2
 
 # GRPO trainer config
+temperature: 1.0
+# quick_eval_dataset: Maxwell-Jia/AIME_2024
+quick_eval_dataset: HuggingFaceH4/MATH-500
 bf16: true
 use_vllm: true
 vllm_device: auto
 vllm_gpu_memory_utilization: 0.5
 do_eval: no
 eval_strategy: "no"
-eval_steps: 10
+eval_steps: 1
 gradient_accumulation_steps: 8
 gradient_checkpointing: true
 gradient_checkpointing_kwargs:

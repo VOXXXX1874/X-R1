@@ -362,6 +362,7 @@ class XGRPOSupervisedTrainer(XGRPOTrainer):
                 return example
             
             self.quick_eval_dataset = quick_eval_dataset.map(make_prompt)
+            self.run_quick_eval = False
         else:
             self.quick_eval_dataset = None
 
@@ -392,9 +393,10 @@ class XGRPOSupervisedTrainer(XGRPOTrainer):
             all_prompts_text = gather_object(prompts_text)
             if self.accelerator.is_main_process:
                 outputs = self.llm.generate(all_prompts_text, sampling_params=self.sampling_params, use_tqdm=False)
-
+                if self.quick_eval_dataset is not None and self.state.global_step % self.args.eval_steps == 1:
+                    self.run_quick_eval = True
                 # perform quick eval with the quick eval dataset if step is a multiple of eval_steps
-                if self.quick_eval_dataset is not None and self.state.global_step % self.args.eval_steps == 0:
+                if self.quick_eval_dataset is not None and self.state.global_step % self.args.eval_steps == 0 and self.run_quick_eval:
                     quick_eval_outputs = self.llm.generate(
                         [x["prompt"] for x in self.quick_eval_dataset],
                         sampling_params=self.sampling_params,
@@ -420,6 +422,7 @@ class XGRPOSupervisedTrainer(XGRPOTrainer):
                             quick_eval_rewards[:, i] = torch.tensor(output_reward_func, dtype=torch.float32, device=device)
                             # write the reward to the metrics
                             self._metrics[f"quick_eval_rewards/{reward_func.__name__}"].append(quick_eval_rewards[:, i].mean().item())
+                    self.run_quick_eval = False
 
                 completion_ids = [out.token_ids for completions in outputs for out in completions.outputs]
                 for output in outputs:

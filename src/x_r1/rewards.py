@@ -67,10 +67,16 @@ def accuracy_reward(completions, solution, silence=False, **kwargs):
             # print('latex gold parsed')
             # We require the answer to be provided in correct latex (no malformed operators)
             answer_parsed = parse(
-                '$'+extract_answer(content)+'$',
+                extract_answer(content),
                 extraction_mode="first_match",
                 extraction_config=[LatexExtractionConfig()],
             )
+            if len(answer_parsed) == 0:
+                answer_parsed = parse(
+                    '$' + extract_answer(content)+'$',
+                    extraction_mode="first_match",
+                    extraction_config=[LatexExtractionConfig()],
+                )
             # Reward 1 if the content is the same as the ground truth, 0 otherwise
             reward = float(verify(answer_parsed, gold_parsed))
             # print('\nprompt:', prompt)
@@ -98,13 +104,23 @@ def accuracy_answer_reward(completion, answer, **kwargs):
     '''
     input is completion string, answer is extracted gold answer.
     '''
-    gold_parsed = answer
+    gold_parsed = parse(
+        answer,
+        extraction_mode="first_match",
+        extraction_config=[LatexExtractionConfig()],
+    )
     if len(gold_parsed) != 0:
         answer_parsed = parse(
-            '$'+extract_answer(completion)+'$',
+            extract_answer(completion),
             extraction_mode="first_match",
             extraction_config=[LatexExtractionConfig()],
         )
+        if len(answer_parsed) == 0:
+            answer_parsed = parse(
+                '$' + extract_answer(completion)+'$',
+                extraction_mode="first_match",
+                extraction_config=[LatexExtractionConfig()],
+            )
         reward = float(verify(answer_parsed, gold_parsed))
         print('-'*100)
         print('\nanswer_parsed:', answer_parsed, '\ngold_parsed:', gold_parsed, '\nreward:', reward)

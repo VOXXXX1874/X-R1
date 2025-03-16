@@ -55,6 +55,12 @@ ACCELERATE_LOG_LEVEL=info accelerate launch \
 ACCELERATE_LOG_LEVEL=info accelerate launch \
 --config_file recipes/zero3.yaml \
 --num_processes=3 src/x_r1/grpo.py \
+--config recipes/X_R1_1dot5B_config.yaml \
+> ./output/x_r1_1dot5B_sampling.log 2>&1
+
+ACCELERATE_LOG_LEVEL=info accelerate launch \
+--config_file recipes/zero3.yaml \
+--num_processes=3 src/x_r1/grpo.py \
 --config recipes/X_R1_3B_config.yaml \
 > ./output/x_r1_3B_sampling.log 2>&1
 
@@ -69,6 +75,12 @@ ACCELERATE_LOG_LEVEL=info accelerate launch \
 --num_processes=3 src/x_r1/grpo.py \
 --config recipes/X_R1_3B_supervised_1dot5B_config.yaml \
 > ./output/X_R1_3B_supervised_1dot5B.log 2>&1
+
+ACCELERATE_LOG_LEVEL=info accelerate launch \
+--config_file recipes/zero3.yaml \
+--num_processes=6 src/x_r1/grpo.py \
+--config recipes/X_R1_7B_supervised_1dot5B_config.yaml \
+> ./output/X_R1_7B_supervised_1dot5B.log 2>&1
 
 CUDA_VISIBLE_DEVICES=0,1,2,3 python ./src/x_r1/benchmark.py \
 	--model_name='records/X-R1-3B_0' \

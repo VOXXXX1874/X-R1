@@ -187,7 +187,6 @@ def main(script_args, training_args, model_args):
             print('Example from quick_eval_dataset:', quick_eval_dataset[0])
         elif script_args.quick_eval_dataset == "HuggingFaceH4/MATH-500":
             quick_eval_dataset = load_dataset(script_args.quick_eval_dataset, name=script_args.dataset_config)
-            quick_eval_dataset['test'] = quick_eval_dataset['test'].select(range(50))
             quick_eval_dataset = quick_eval_dataset.remove_columns("solution")
             quick_eval_dataset = quick_eval_dataset.rename_column("answer", "solution")
             quick_eval_dataset = quick_eval_dataset.map(make_latex)

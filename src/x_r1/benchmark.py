@@ -46,6 +46,12 @@ def create_dataset(dataset_name, tokenizer):
 
     dataset = dataset.map(make_conversation)
 
+    def make_latex(example):
+        example["answer"] = '$' + str(example["answer"]) + '$'
+        return example
+
+    dataset = dataset.map(make_latex)
+
     def format_function(example):
         example['prompt'] = tokenizer.apply_chat_template(example['prompt'], tokenize = False, add_generation_prompt = True )
         return example
@@ -71,14 +77,14 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
         prompts.append(data['prompt'])
 
     # Create a sampling params object.
-    sampling_params = SamplingParams(temperature=0.6,
+    sampling_params = SamplingParams(temperature=0.0,
                                      max_tokens=max_output_tokens,
                                      )
     # Create LLM object
     llm = LLM(model=model_name,  # replace your own model
                 dtype='bfloat16',
                 tensor_parallel_size=num_gpus,  # number of gpu
-                gpu_memory_utilization=0.9,  # prevent OOM
+                gpu_memory_utilization=0.7,  # prevent OOM
                 trust_remote_code=True,
                 # use_cache=False,
               )
@@ -99,7 +105,7 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
         # print("Prompt: ", prompt)
         # print("completion:", completion)
 
-        acc_score = accuracy_answer_reward(completion, gold_answer )
+        acc_score = accuracy_answer_reward(completion, gold_answer, slience=True)
         acc_scores.append(acc_score)
         total_acc = total_acc + acc_score
 

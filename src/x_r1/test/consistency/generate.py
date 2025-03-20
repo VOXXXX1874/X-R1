@@ -5,7 +5,7 @@ model_name = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
 device = "cuda" # the device to load the model onto
 
 # Read question from question.txt
-with open("src/x_r1/test/question1/question.txt", "r") as file:
+with open("src/x_r1/test/consistency/question1/question.txt", "r") as file:
     question = file.read()
 
 model = AutoModelForCausalLM.from_pretrained(

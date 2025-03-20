@@ -98,6 +98,10 @@ def accuracy_reward(completions, solution, silence=False, **kwargs):
 
     return rewards
 
+def accuracy_answer_thinking_reward(completions, solution, silence=False, **kwargs):
+    """Reward function that checks if the completion is the same as the ground truth and assign partial reward for crucial thinking results."""
+    pass
+
 
 def accuracy_answer_reward(completion, answer, **kwargs):
     """Reward function that checks if the completion is the same as the ground truth."""

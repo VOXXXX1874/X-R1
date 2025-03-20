@@ -1,15 +1,15 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # Read question from question.txt
-with open("src/x_r1/test/question1/question.txt", "r") as file:
+with open("src/x_r1/test/consistency/question1/question.txt", "r") as file:
     question = file.read()
 
 # Read output1 from output1.txt
-with open("src/x_r1/test/question1/output1.txt", "r") as file:
+with open("src/x_r1/test/consistency/question1/output1.txt", "r") as file:
     output1 = file.read()
 
 # Read output2 from output2.txt
-with open("src/x_r1/test/question1/output2.txt", "r") as file:
+with open("src/x_r1/test/consistency/question1/output2.txt", "r") as file:
     output2 = file.read()
 
 model_name = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"

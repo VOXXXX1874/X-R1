@@ -7,7 +7,6 @@ model_name_or_path: Qwen/Qwen2.5-1.5B-Instruct
 model_revision: main
 torch_dtype: bfloat16
 attn_implementation: flash_attention_2
-reference_model: Qwen/Qwen2.5-1.5B-Instruct
 
 # Data training arguments
 dataset_name: xiaodongguaAIGC/X-R1-1500
@@ -16,6 +15,7 @@ dataset_configs:
 num_processes: 5
 
 # GRPO trainer config
+trainer_type: "XGRPOTrainer"
 temperature: 0.6
 quick_eval_dataset: HuggingFaceH4/MATH-500
 bf16: true
@@ -49,4 +49,3 @@ report_to:
 save_strategy: "epoch"
 seed: 42
 warmup_ratio: 0.1
-trainer_type: "XGRPOSupervisedTrainer"

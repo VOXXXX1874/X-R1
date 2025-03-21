@@ -1,4 +1,4 @@
-from math_verify import LatexExtractionConfig
+from math_verify import LatexExtractionConfig, ExprExtractionConfig
 import re
 from itertools import groupby
 from typing import Sequence
@@ -65,10 +65,8 @@ def extract_target_from_pred(
     return extracted_predictions
 
 # Read solution from solution.txt
-with open("src/x_r1/test/process_reward/solution.txt", "r") as file:
+with open("src/x_r1/test/process_reward/solution.md", "r") as file:
     solution = file.read()
-
-print(solution)
 
 gold_parsed = thinking_parse(
     solution,
@@ -78,3 +76,4 @@ gold_parsed = thinking_parse(
 for parsed_results in gold_parsed:
     if len(parsed_results[1]) > 12:
         print(parsed_results)
+

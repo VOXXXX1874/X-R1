@@ -15,7 +15,8 @@ dataset_configs:
 num_processes: 3
 
 # GRPO trainer config
-
+trainer_type: "XGRPOTrainer"
+quick_eval_dataset: HuggingFaceH4/MATH-500
 bf16: true
 use_vllm: true
 vllm_device: auto

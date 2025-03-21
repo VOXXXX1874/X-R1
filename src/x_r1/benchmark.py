@@ -18,7 +18,7 @@ from vllm import LLM, SamplingParams
 import argparse
 import json
 from grpo import SYSTEM_PROMPT
-from rewards import accuracy_answer_reward
+from rewards import eval_answer_reward, eval_answer_thinking_reward
 # import torch
 import re
 from transformers import AutoTokenizer 
@@ -72,9 +72,11 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
 
     answers = []
     prompts = []
+    solutions = []
     for data in dataset:
         answers.append(data['answer'])
         prompts.append(data['prompt'])
+        solutions.append(data['solution'])
 
     # Create a sampling params object.
     sampling_params = SamplingParams(temperature=0.0,
@@ -98,14 +100,16 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
     result_all = []
     total_acc = 0
     total_format = 0
-    for output, gold_answer, in zip (outputs, answers):
+    for output, gold_answer, gold_solutions in zip (outputs, answers, solutions):
         prompt = output.prompt
         completion = output.outputs[0].text
 
         # print("Prompt: ", prompt)
         # print("completion:", completion)
-
-        acc_score = accuracy_answer_reward(completion, gold_answer, slience=True)
+        if args.reward_function == 'eval_answer_reward':
+            acc_score = eval_answer_reward(completion, gold_answer, args.tag, slience=True)
+        elif args.reward_function == 'eval_answer_thinking_reward':
+            acc_score = eval_answer_thinking_reward(completion, gold_answer, gold_solutions, args.tag, slience=True)
         acc_scores.append(acc_score)
         total_acc = total_acc + acc_score
 
@@ -150,9 +154,15 @@ if __name__ == "__main__":
                         help='generation tokens')
     parser.add_argument('--num_gpus', type=int, default=1,
                         help='generation tokens')
-
+    parser.add_argument('--reward_function', type=str, default='eval_answer_reward',
+                        help='reward function')
+    parser.add_argument('--tag', type=lambda x: (str(x).lower() == 'true'), default=False,
+                        help='tag')
     args = parser.parse_args()
     print(args)
+
+    if args.reward_function != 'eval_answer_reward' and args.reward_function != 'eval_answer_thinking_reward':
+        raise ValueError('reward function not found')
 
     vllm_generate(args.model_name,
                   args.output_name,

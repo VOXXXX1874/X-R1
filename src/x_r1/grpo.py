@@ -279,6 +279,7 @@ def main(script_args, training_args, model_args):
             eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
             peft_config=get_peft_config(model_args), # LoRA parameter
             callbacks=get_callbacks(training_args, model_args),
+            quick_eval_dataset=quick_eval_dataset if script_args.quick_eval_dataset else None,
         )
     elif script_args.trainer_type == "XGRPOPlusTrainer":
         trainer = XGRPOPlusTrainer(
@@ -290,6 +291,7 @@ def main(script_args, training_args, model_args):
             eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
             peft_config=get_peft_config(model_args), # LoRA parameter
             callbacks=get_callbacks(training_args, model_args),
+            quick_eval_dataset=quick_eval_dataset if script_args.quick_eval_dataset else None,
         )
     elif script_args.trainer_type == "XGRPOSupervisedTrainer":
         trainer = XGRPOSupervisedTrainer(

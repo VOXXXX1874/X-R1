@@ -16,6 +16,7 @@ dataset_configs:
 num_processes: 6
 
 # GRPO trainer config
+trainer_type: "XGRPOSupervisedTrainer"
 temperature: 0.6
 # quick_eval_dataset: Maxwell-Jia/AIME_2024
 quick_eval_dataset: HuggingFaceH4/MATH-500

@@ -10,13 +10,12 @@ def thinking_parse(
         LatexExtractionConfig(),
         ExprExtractionConfig(),
     ],
-    parsing_timeout: int = 3,
 ):
     """Extracts and parses all mathematical expressions appearing in a prediction string.
     """
     try:
         target_res = get_extraction_regexes(extraction_config)
-        return extract_target_from_pred(pred, target_res, timeout_seconds=parsing_timeout)
+        return extract_target_from_pred(pred, target_res)
     except Exception as e:
         print(f"Error during parsing: {e}")
         return []
@@ -25,7 +24,6 @@ def thinking_parse(
 def extract_target_from_pred(
     pred: str,
     target_res: list[tuple[list[tuple[re.Pattern[str], int]], ExtractionTarget]],
-    timeout_seconds: int,
 ):
     """Extracts targets from a prediction string using regex patterns.
     Returns all sucesffuly extracted match.
@@ -57,7 +55,7 @@ def extract_target_from_pred(
 
     # Try to extract from each match, starting from rightmost
     for match, _, _, target_type in matches_with_pos:
-        extracted_match, str_fallback = extract_match(match, target_type, timeout_seconds=timeout_seconds)
+        extracted_match, str_fallback = extract_match(match, target_type)
 
         if extracted_match is not None:
             extracted_predictions.append([extracted_match, str_fallback])

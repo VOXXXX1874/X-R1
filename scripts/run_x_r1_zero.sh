@@ -72,14 +72,14 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python ./src/x_r1/benchmark.py \
     --dataset_name='HuggingFaceH4/MATH-500' \
 	--output_name='./output/result_benchmark_math500'  \
 	--max_output_tokens=2048 \
-	--num_gpus=4
+	--num_gpus=4 > output/benchmark_sampling.log 2>&1
 
 CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
 	--model_name='records/X-R1-3B-7500-epoch1' \
     --dataset_name='HuggingFaceH4/MATH-500' \
 	--output_name='./output/result_benchmark_math500'  \
 	--max_output_tokens=2048 \
-	--num_gpus=1
+	--num_gpus=1 > output/benchmark_sampling.log 2>&1
 
 CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
 	--model_name='Qwen/Qwen2.5-0.5B-Instruct' \
@@ -88,7 +88,7 @@ CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
 	--max_output_tokens=2048 \
 	--num_gpus=1 \
 	--reward_function='eval_answer_reward' \
-	--tag False
+	--tag False > output/benchmark_sampling.log 2>&1
 
 CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
 	--model_name='Qwen/Qwen2.5-0.5B-Instruct' \
@@ -97,4 +97,4 @@ CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
 	--max_output_tokens=2048 \
 	--num_gpus=1 \
 	--reward_function='eval_answer_thinking_reward' \
-	--tag False
+	--tag False > output/benchmark_sampling.log 2>&1

@@ -17,7 +17,7 @@ from datasets import load_dataset, Dataset, DatasetDict
 from vllm import LLM, SamplingParams
 import argparse
 import json
-from grpo import SYSTEM_PROMPT
+from utils.prepare_dataset import SYSTEM_PROMPT
 from rewards import eval_answer_reward, eval_answer_thinking_reward
 # import torch
 import re
@@ -33,16 +33,24 @@ def format_reward(completion):
     return rewards
 
 
-def create_dataset(dataset_name, tokenizer):
+def create_dataset(dataset_name, tokenizer, tag):
     dataset = load_dataset(dataset_name, split='test')
 
     def make_conversation(example):
-        return {
-            "prompt": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": example["problem"]},
-            ],
-        }
+        if tag:
+            return {
+                "prompt": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": example["problem"]},
+                ],
+            }
+        else:
+            return {
+                "prompt": [
+                    {"role": "system", "content": 'Please solve the problem step by step and put the answer in the answer box \\boxed{}'},
+                    {"role": "user", "content": example["problem"]},
+                ]
+            }
 
     dataset = dataset.map(make_conversation)
 
@@ -66,7 +74,7 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     # evaluation dataset
-    dataset = create_dataset(dataset_name, tokenizer)
+    dataset = create_dataset(dataset_name, tokenizer, args.tag)
     print(dataset)
 
 
@@ -76,7 +84,7 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
     for data in dataset:
         answers.append(data['answer'])
         prompts.append(data['prompt'])
-        solutions.append(data['solution'])
+        solutions.append(data['solution']) if 'solution' in data else solutions.append('')
 
     # Create a sampling params object.
     sampling_params = SamplingParams(temperature=0.0,
@@ -156,7 +164,7 @@ if __name__ == "__main__":
                         help='generation tokens')
     parser.add_argument('--reward_function', type=str, default='eval_answer_reward',
                         help='reward function')
-    parser.add_argument('--tag', type=lambda x: (str(x).lower() == 'true'), default=False,
+    parser.add_argument('--tag', type=lambda x: (str(x).lower() == 'true'), default=True,
                         help='tag')
     args = parser.parse_args()
     print(args)

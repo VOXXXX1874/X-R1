@@ -46,6 +46,12 @@ ACCELERATE_LOG_LEVEL=info accelerate launch \
 --config recipes/X_R1_3B_config.yaml \
 > ./output/x_r1_3B_sampling.log 2>&1
 
+ACCELERATE_LOG_LEVEL=info accelerate launch \
+--config_file recipes/zero3.yaml \
+--num_processes=4 src/x_r1/grpo.py \
+--config recipes/X_R1_1dot5B_config_gsc.yaml \
+> ./output/x_r1_1dot5B_sampling.log 2>&1
+
 # supervised
 ACCELERATE_LOG_LEVEL=info accelerate launch \
 --config_file recipes/zero3.yaml \
@@ -98,3 +104,16 @@ CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
 	--num_gpus=1 \
 	--reward_function='eval_answer_thinking_reward' \
 	--tag False > output/benchmark_sampling.log 2>&1
+
+CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
+	--model_name='Qwen/Qwen2.5-3B-Instruct' \
+    --dataset_name='src/fol_r1/gsc' \
+	--output_name='./output/result_benchmark_gsc'  \
+	--max_output_tokens=2048 \
+	--num_gpus=1 \
+	--reward_function='eval_answer_reward' \
+	--tag False > output/benchmark_sampling.log 2>&1
+
+# data
+
+python src/fol_r1/gsc/generate.py --num_of_var 5 --num_of_generation 3 --num_of_questions 10000

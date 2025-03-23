@@ -20,7 +20,6 @@ from dataclasses import dataclass, field
 import datasets
 import torch
 import transformers
-from datasets import load_dataset
 from transformers import set_seed
 from transformers.trainer_utils import get_last_checkpoint
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -36,6 +35,7 @@ from rewards import (
     reasoning_steps_reward,
 )
 from utils.callbacks import get_callbacks
+from utils.prepare_dataset import prepare_dataset, prepare_quick_eval_dataset
 from x_grpo_trainer import XGRPOTrainer
 from x_grpo_plus_trainer import XGRPOPlusTrainer
 from x_grpo_supervised_trainer import XGRPOSupervisedTrainer
@@ -45,7 +45,6 @@ from peft import LoraConfig, PeftModel, get_peft_model
 
 logger = logging.getLogger(__name__)
 
-import wandb
 
 
 def init_wandb_training(training_args):
@@ -108,28 +107,6 @@ class GRPOScriptArguments(ScriptArguments):
         default=None,
         metadata={"help": "Quick evaluation dataset"},
     )
-    
-def make_latex(example):
-    example["solution"] = '$' + str(example["solution"]) + '$'
-    return example
-
-
-# Format into conversation
-def make_conversation(example):
-    return {
-        "prompt": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": example["problem"]},
-        ],
-    }
-
-
-SYSTEM_PROMPT = (
-    "A conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant "
-    "first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning "
-    "process and answer are enclosed within <think> </think> and <answer> </answer> tags, respectively, i.e., "
-    "<think> reasoning process here </think><answer> answer here </answer>"
-)
 
 
 def main(script_args, training_args, model_args):
@@ -171,49 +148,10 @@ def main(script_args, training_args, model_args):
         init_wandb_training(training_args)
 
     # Load the dataset
-    dataset = load_dataset(script_args.dataset_name, name=script_args.dataset_config)
+    dataset = prepare_dataset(script_args.dataset_name, script_args.dataset_train_split)
 
     if script_args.quick_eval_dataset:
-        if script_args.quick_eval_dataset == "Maxwell-Jia/AIME_2024":
-            quick_eval_dataset = load_dataset(script_args.quick_eval_dataset, name=script_args.dataset_config)
-            quick_eval_dataset = quick_eval_dataset.remove_columns("Solution")
-            quick_eval_dataset = quick_eval_dataset.remove_columns("ID")
-            quick_eval_dataset = quick_eval_dataset.rename_column("Answer", "solution")
-            quick_eval_dataset = quick_eval_dataset.rename_column("Problem", "problem")
-            quick_eval_dataset = quick_eval_dataset.map(make_latex)
-            quick_eval_dataset = quick_eval_dataset.map(make_conversation)
-            quick_eval_dataset = quick_eval_dataset['train']
-            # display one example from the dataset
-            print('Example from quick_eval_dataset:', quick_eval_dataset[0])
-        elif script_args.quick_eval_dataset == "HuggingFaceH4/MATH-500":
-            quick_eval_dataset = load_dataset(script_args.quick_eval_dataset, name=script_args.dataset_config)
-            quick_eval_dataset = quick_eval_dataset.remove_columns("solution")
-            quick_eval_dataset = quick_eval_dataset.rename_column("answer", "solution")
-            quick_eval_dataset = quick_eval_dataset.map(make_latex)
-            quick_eval_dataset = quick_eval_dataset.map(make_conversation)
-            quick_eval_dataset = quick_eval_dataset['test']
-            # display one example from the dataset
-            print('Example from quick_eval_dataset:', quick_eval_dataset[0])
-        else:
-            raise ValueError(f"Invalid quick eval dataset: {script_args.quick_eval_dataset}")
-
-
-    # align the dataset
-    if script_args.dataset_name == "FreedomIntelligence/medical-o1-verifiable-problem":
-        dataset = dataset.rename_columns({
-            "Open-ended Verifiable Question": "problem",
-            "Ground-True Answer": "solution"
-        })
-
-    # if DeepScaleR-Preview-Dataset in the name of the dataset, then we need to remove the solution column and rename answer column to solution
-    if "DeepScaleR-Preview-Dataset" in script_args.dataset_name:
-        # Take half of the dataset
-        dataset[script_args.dataset_train_split] = dataset[script_args.dataset_train_split].select(range(len(dataset[script_args.dataset_train_split])//2))
-
-        dataset = dataset.remove_columns("solution")
-        dataset = dataset.rename_columns({"answer": "solution"})
-        
-        dataset = dataset.map(make_latex)
+        quick_eval_dataset = prepare_quick_eval_dataset(script_args.quick_eval_dataset)
 
     # Get reward functions
     REWARD_FUNCS_REGISTRY = {
@@ -234,14 +172,6 @@ def main(script_args, training_args, model_args):
         "length": len_reward,
     }
     reward_funcs = [REWARD_FUNCS_REGISTRY[func] for func in script_args.reward_funcs]
-
-
-
-    dataset = dataset.map(make_conversation)
-    for split in dataset:
-        if "messages" in dataset[split].column_names:
-            dataset[split] = dataset[split].remove_columns("messages")
-
 
     logger.info("*** Initializing model kwargs ***")
     torch_dtype = (

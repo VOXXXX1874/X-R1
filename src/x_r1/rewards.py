@@ -263,7 +263,7 @@ def eval_answer_thinking_reward(completion, answer, process, tag=False, silence=
 
 def format_reward(completions, silence=False, **kwargs):
     """Reward function that checks if the completion has a specific format."""
-    pattern = r"^<think>.*?</think><answer>.*?</answer>$"
+    pattern = r"^<think>.*?</think>\s*<answer>.*?</answer>$"
     completion_contents = [completion[0]["content"] for completion in completions]
     matches = [re.match(pattern, content) for content in completion_contents]
 

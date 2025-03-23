@@ -7,7 +7,6 @@ from openai import OpenAI
 from latex2sympy2_extended import NormalizationConfig
 from math_verify import LatexExtractionConfig, parse, verify
 import math
-from math_verify.parser import *
 
 # Initialize OpenAI client
 client = None
@@ -40,61 +39,24 @@ def extract_thinking(text):
 
 def thinking_parse(
     pred: str,
-    extraction_config: Sequence[ExtractionTarget] = [
-        LatexExtractionConfig(),
-        ExprExtractionConfig(),
-    ],
 ):
-    """Extracts and parses all mathematical expressions appearing in a prediction string.
     """
-    try:
-        target_res = get_extraction_regexes(extraction_config)
-        return extract_target_from_pred(pred, target_res)
-    except Exception as e:
-        print(f"Error during parsing: {e}")
-        return []
+    Extracts and parses all mathematical expressions appearing in a prediction string.
+    Because latex parse and sympy verify is too slow, we only extract the string and we suggest naive string similarity comparison.
+    """
+    
+    raise NotImplementedError("thinking_parse is not implemented yet.")
+    
 
-
-def extract_target_from_pred(
+def thinking_verify(
     pred: str,
-    target_res: list[tuple[list[tuple[re.Pattern[str], int]], ExtractionTarget]],
+    gold: str,
 ):
-    """Extracts targets from a prediction string using regex patterns.
-    Returns all sucesffuly extracted match.
     """
-    extracted_predictions = []
+    Verify the thinking process.
+    """
+    raise NotImplementedError("thinking_verify is not implemented yet.")
 
-    # Get all patterns and sort by priority
-    all_patterns = [
-        (pattern, target_type, priority)
-        for target_patterns, target_type in target_res
-        for pattern, priority in target_patterns
-    ]
-
-    # Group patterns by priority using itertools.groupby
-    sorted_patterns = sorted(all_patterns, key=lambda x: x[2])
-    grouped_patterns = list((gr, list(val)) for gr, val in groupby(sorted_patterns, key=lambda x: x[2]))
-    _, patterns_group = grouped_patterns[-1]
-    # Find all matches for each pattern in this priority group
-    matches_with_pos = (
-        (match, match.start(), match.end(), target_type)
-        for pattern, target_type, _ in patterns_group
-        for match in pattern.finditer(pred)
-    )
-
-    # Sort matches by end position (rightmost first) and then by start position (leftmost first)
-    matches_with_pos = sorted(
-        matches_with_pos, key=lambda x: (x[2], -x[1]), reverse=True
-    )
-
-    # Try to extract from each match, starting from rightmost
-    for match, _, _, target_type in matches_with_pos:
-        extracted_match, str_fallback = extract_match(match, target_type)
-
-        if extracted_match is not None:
-            extracted_predictions.append([extracted_match, str_fallback])
-
-    return extracted_predictions
 
 def evaluate_answer_similarity(answer, solution):
     """Use GPT4O-mini to evaluate answer similarity."""
@@ -208,7 +170,7 @@ def accuracy_thinking_reward(completions, solution, process, silence=False, **kw
                 atom_reward = 0.8 / len(gold_thinking)
                 for gold_thinking in gold_thinking:
                     for thinking in thinking_parsed:
-                        if verify(thinking, gold_thinking):
+                        if thinking_verify(thinking, gold_thinking):
                             print('thinking:', thinking, 'gold_thinking:', gold_thinking)
                             reward += atom_reward
                             break
@@ -289,7 +251,7 @@ def eval_answer_thinking_reward(completion, answer, process, tag=False, silence=
             atom_reward = 0.8 / len(gold_thinking)
             for gold_thinking in gold_thinking:
                 for thinking in thinking_parsed:
-                    if verify(thinking, gold_thinking):
+                    if thinking_verify(thinking, gold_thinking):
                         print('thinking:', thinking, 'gold_thinking:', gold_thinking)
                         reward += atom_reward
                         break

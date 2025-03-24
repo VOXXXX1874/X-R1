@@ -7,6 +7,7 @@ from openai import OpenAI
 from latex2sympy2_extended import NormalizationConfig
 from math_verify import LatexExtractionConfig, parse, verify
 import math
+from math_verify.parser import *
 
 # Initialize OpenAI client
 client = None
@@ -39,23 +40,84 @@ def extract_thinking(text):
 
 def thinking_parse(
     pred: str,
+    extraction_config: Sequence[ExtractionTarget] = [
+        LatexExtractionConfig(),
+        ExprExtractionConfig(),
+    ],
 ):
     """
-    Extracts and parses all mathematical expressions appearing in a prediction string.
-    Because latex parse and sympy verify is too slow, we only extract the string and we suggest naive string similarity comparison.
+    Parses all mathematical expressions appearing in a prediction string.
+    Extract possible 'critical value' from the expression.
     """
-    
-    raise NotImplementedError("thinking_parse is not implemented yet.")
-    
+    try:
+        target_res = get_extraction_regexes(extraction_config)
+        return extract_target_from_pred(pred, target_res)
+    except Exception as e:
+        print(f"Error during parsing: {e}")
+        return []
 
-def thinking_verify(
+
+def extract_target_from_pred(
     pred: str,
-    gold: str,
+    target_res: list[tuple[list[tuple[re.Pattern[str], int]], ExtractionTarget]],
 ):
     """
-    Verify the thinking process.
+    Extracts targets from a prediction string using regex patterns.
+    Returns all sucesffuly extracted match.
+
+    The target is the 'critical value' in the thinking process.
+    Empirically, the 'critical value' is always in the rightmost side of equation or standalone.
     """
-    raise NotImplementedError("thinking_verify is not implemented yet.")
+    extracted_predictions = []
+
+    # Get all patterns and sort by priority
+    all_patterns = [
+        (pattern, target_type, priority)
+        for target_patterns, target_type in target_res
+        for pattern, priority in target_patterns
+    ]
+
+    # Group patterns by priority using itertools.groupby
+    sorted_patterns = sorted(all_patterns, key=lambda x: x[2])
+    grouped_patterns = list((gr, list(val)) for gr, val in groupby(sorted_patterns, key=lambda x: x[2]))
+    _, patterns_group = grouped_patterns[-1]
+    # Find all matches for each pattern in this priority group
+    matches_with_pos = (
+        (match, match.start(), match.end(), target_type)
+        for pattern, target_type, _ in patterns_group
+        for match in pattern.finditer(pred)
+    )
+
+    # Try to extract from each match, starting from rightmost
+    for match, _, _, target_type in matches_with_pos:
+        # Convert the match to plain string
+        match = match.group(0)
+        # Find the last '=' in the match
+        last_eq = match.rfind("=")
+        # If there is an '=', extract from the right side of the '='
+        if last_eq != -1:
+            match = match[last_eq + 1:]
+        # Add '\(' to the beginning of the match if there is no '\('
+        if not match.strip().startswith("\\("):
+            match = "\\(" + match
+        # Convert the match back to a regex match object
+        pred = match
+        matches_with_pos = (
+            (match, match.start(), match.end(), target_type)
+            for pattern, target_type, _ in patterns_group
+            for match in pattern.finditer(pred)
+        )
+        match, _, _, _ = next(matches_with_pos)
+        #print(match)
+        # Extract the match
+        extracted_match, str_fallback = extract_match(match, target_type)
+
+        print("extracted_match", extracted_match)
+
+        if extracted_match is not None:
+            extracted_predictions.append(extracted_match)
+
+    return extracted_predictions
 
 
 def evaluate_answer_similarity(answer, solution):
@@ -170,7 +232,7 @@ def accuracy_thinking_reward(completions, solution, process, silence=False, **kw
                 atom_reward = 0.8 / len(gold_thinking)
                 for gold_thinking in gold_thinking:
                     for thinking in thinking_parsed:
-                        if thinking_verify(thinking, gold_thinking):
+                        if verify(thinking, gold_thinking):
                             print('thinking:', thinking, 'gold_thinking:', gold_thinking)
                             reward += atom_reward
                             break
@@ -251,7 +313,7 @@ def eval_answer_thinking_reward(completion, answer, process, tag=False, silence=
             atom_reward = 0.8 / len(gold_thinking)
             for gold_thinking in gold_thinking:
                 for thinking in thinking_parsed:
-                    if thinking_verify(thinking, gold_thinking):
+                    if verify(thinking, gold_thinking):
                         print('thinking:', thinking, 'gold_thinking:', gold_thinking)
                         reward += atom_reward
                         break

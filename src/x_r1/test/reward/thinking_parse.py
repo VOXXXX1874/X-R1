@@ -60,29 +60,30 @@ def extract_target_from_pred(
 
     # Try to extract from each match, starting from rightmost
     for match, _, _, target_type in matches_with_pos:
-        # Convert the match to plain string
-        match = match.group(0)
         # Find the last '=' in the match
-        last_eq = match.rfind("=")
-        # If there is an '=', extract from the right side of the '='
+        last_eq = match.group(0).rfind("=")
+        # If there is an '=', extract from the right side of the '=' and perform further extraction
         if last_eq != -1:
+            # Convert the match to plain string
+            match = match.group(0)
             match = match[last_eq + 1:]
-        # Add '\(' to the beginning of the match if there is no '\('
-        if not match.strip().startswith("\\("):
-            match = "\\(" + match
-        # Convert the match back to a regex match object
-        pred = match
-        matches_with_pos = (
-            (match, match.start(), match.end(), target_type)
-            for pattern, target_type, _ in patterns_group
-            for match in pattern.finditer(pred)
-        )
-        match, _, _, _ = next(matches_with_pos)
-        #print(match)
+            # If match contains \], add \[ to the beginning
+            if "\\]" in match:
+                match = "\\[" + match
+            # If match contains \), add \( to the beginning
+            if "\\)" in match:
+                match = "\\(" + match
+            # Convert the match back to a regex match object
+            pred = match
+            matches_with_pos = (
+                (match, match.start(), match.end(), target_type)
+                for pattern, target_type, _ in patterns_group
+                for match in pattern.finditer(pred)
+            )
+            match, _, _, _ = next(matches_with_pos)
+            #print(match)
         # Extract the match
         extracted_match, str_fallback = extract_match(match, target_type)
-
-        print("extracted_match", extracted_match)
 
         if extracted_match is not None:
             extracted_predictions.append(extracted_match)

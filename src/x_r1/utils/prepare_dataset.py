@@ -1,10 +1,9 @@
 from datasets import load_dataset
 
 SYSTEM_PROMPT = (
-    "A conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant "
-    "first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning "
-    "process and answer are enclosed within <think> </think> and <answer> </answer> tags, respectively, i.e., "
-    "<think> reasoning process here </think><answer> answer here </answer>"
+    "A conversation between a User and an Assistant. "
+    "The User asks a question; the Assistant solves it by first reasoning privately, then providing the final response. "
+    "The Assistant encloses its reasoning in <think> </think>, the answer in <answer> </answer>, and any mathematical expressions or calculation in \\( \\). "
 )
 
 # Format into conversation

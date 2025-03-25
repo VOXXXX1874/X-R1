@@ -47,7 +47,7 @@ def create_dataset(dataset_name, tokenizer, tag):
         else:
             return {
                 "prompt": [
-                    {"role": "system", "content": 'Please solve the problem step by step and put the answer in the answer box \\boxed{}'},
+                    {"role": "system", "content": 'Please solve the problem step by step. Put the answer in the answer box \\boxed{} and any mathematical expressions or calculation in \\( \\)'},
                     {"role": "user", "content": example["problem"]},
                 ]
             }
@@ -80,11 +80,11 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
 
     answers = []
     prompts = []
-    solutions = []
+    processes = []
     for data in dataset:
         answers.append(data['answer'])
         prompts.append(data['prompt'])
-        solutions.append(data['solution']) if 'solution' in data else solutions.append('')
+        processes.append(data['process']) if 'process' in data else processes.append('')
 
     # Create a sampling params object.
     sampling_params = SamplingParams(temperature=0.0,
@@ -108,16 +108,16 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
     result_all = []
     total_acc = 0
     total_format = 0
-    for output, gold_answer, gold_solutions in zip (outputs, answers, solutions):
+    for output, gold_answer, gold_process in zip (outputs, answers, processes):
         prompt = output.prompt
         completion = output.outputs[0].text
 
         # print("Prompt: ", prompt)
         # print("completion:", completion)
         if args.reward_function == 'eval_answer_reward':
-            acc_score = eval_answer_reward(completion, gold_answer, args.tag, slience=True)
+            acc_score = eval_answer_reward(completion, gold_answer, args.tag, silence=False)
         elif args.reward_function == 'eval_answer_thinking_reward':
-            acc_score = eval_answer_thinking_reward(completion, gold_answer, gold_solutions, args.tag, slience=True)
+            acc_score = eval_answer_thinking_reward(completion, gold_answer, gold_process, args.tag, silence=False)
         acc_scores.append(acc_score)
         total_acc = total_acc + acc_score
 

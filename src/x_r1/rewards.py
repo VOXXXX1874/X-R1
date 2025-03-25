@@ -8,6 +8,7 @@ from latex2sympy2_extended import NormalizationConfig
 from math_verify import LatexExtractionConfig, parse, verify
 import math
 from math_verify.parser import *
+from sympy import nan, zoo
 
 # Initialize OpenAI client
 client = None
@@ -61,12 +62,8 @@ def extract_target_from_pred(
     pred: str,
     target_res: list[tuple[list[tuple[re.Pattern[str], int]], ExtractionTarget]],
 ):
-    """
-    Extracts targets from a prediction string using regex patterns.
+    """Extracts targets from a prediction string using regex patterns.
     Returns all sucesffuly extracted match.
-
-    The target is the 'critical value' in the thinking process.
-    Empirically, the 'critical value' is always in the rightmost side of equation or standalone.
     """
     extracted_predictions = []
 
@@ -90,29 +87,30 @@ def extract_target_from_pred(
 
     # Try to extract from each match, starting from rightmost
     for match, _, _, target_type in matches_with_pos:
-        # Convert the match to plain string
-        match = match.group(0)
         # Find the last '=' in the match
-        last_eq = match.rfind("=")
-        # If there is an '=', extract from the right side of the '='
+        last_eq = match.group(0).rfind("=")
+        # If there is an '=', extract from the right side of the '=' and perform further extraction
         if last_eq != -1:
+            # Convert the match to plain string
+            match = match.group(0)
             match = match[last_eq + 1:]
-        # Add '\(' to the beginning of the match if there is no '\('
-        if not match.strip().startswith("\\("):
-            match = "\\(" + match
-        # Convert the match back to a regex match object
-        pred = match
-        matches_with_pos = (
-            (match, match.start(), match.end(), target_type)
-            for pattern, target_type, _ in patterns_group
-            for match in pattern.finditer(pred)
-        )
-        match, _, _, _ = next(matches_with_pos)
-        #print(match)
+            # If match contains \], add \[ to the beginning
+            if "\\]" in match:
+                match = "\\[" + match
+            # If match contains \), add \( to the beginning
+            if "\\)" in match:
+                match = "\\(" + match
+            # Convert the match back to a regex match object
+            pred = match
+            matches_with_pos = (
+                (match, match.start(), match.end(), target_type)
+                for pattern, target_type, _ in patterns_group
+                for match in pattern.finditer(pred)
+            )
+            match, _, _, _ = next(matches_with_pos)
+            #print(match)
         # Extract the match
         extracted_match, str_fallback = extract_match(match, target_type)
-
-        print("extracted_match", extracted_match)
 
         if extracted_match is not None:
             extracted_predictions.append(extracted_match)
@@ -143,6 +141,51 @@ def evaluate_answer_similarity(answer, solution):
         print(f"Error in GPT evaluation: {e}")
         # If API call fails, fall back to simple text matching
         return 1.0 if normalize_text(answer) == normalize_text(solution) else 0.0
+    
+def outcome_reward(answer, solution):
+    gold_parsed = parse(
+        solution,
+        extraction_mode="first_match",
+        extraction_config=[LatexExtractionConfig()],
+    )
+    answer_parsed = parse(
+        answer,
+        extraction_mode="first_match",
+        extraction_config=[LatexExtractionConfig()],
+    )
+    if len(answer_parsed) == 0:
+        answer_parsed = parse(
+            '$' + answer +'$',
+            extraction_mode="first_match",
+            extraction_config=[LatexExtractionConfig()],
+        )
+    if answer_parsed[0] == nan or answer_parsed[0] == zoo:
+        return gold_parsed, 'nan', 0.0
+
+    reward = float(verify(answer_parsed, gold_parsed))
+
+    return gold_parsed, answer_parsed, reward
+
+def critical_value_reward(thinking_completion, process):
+    reward = 0.0
+    gold_steps = thinking_parse(
+            extract_thinking(process),
+            extraction_config=[LatexExtractionConfig()],
+        )
+    if len(gold_steps) != 0:
+        steps_parsed = thinking_parse(
+            thinking_completion,
+            extraction_config=[LatexExtractionConfig()],
+        )
+        atom_reward = 0.6 / len(gold_steps)
+        for gold_step in gold_steps:
+            for step_parsed in steps_parsed:
+                if step_parsed == nan or step_parsed == zoo:
+                    continue
+                if verify(step_parsed, gold_step):
+                    reward += atom_reward
+                    break
+    return reward
 
 # for training
 def accuracy_reward(completions, solution, silence=False, **kwargs):
@@ -151,41 +194,17 @@ def accuracy_reward(completions, solution, silence=False, **kwargs):
     rewards = []
     for content, sol in zip(contents, solution):
         # First try latex parsing
-        gold_parsed = parse(
-            sol,
-            extraction_mode="first_match",
-            extraction_config=[LatexExtractionConfig()],
-        )
-        if len(gold_parsed) != 0:
-            # print('latex gold parsed')
-            # We require the answer to be provided in correct latex (no malformed operators)
-            answer_parsed = parse(
-                extract_answer(content),
-                extraction_mode="first_match",
-                extraction_config=[LatexExtractionConfig()],
-            )
-            if len(answer_parsed) == 0:
-                answer_parsed = parse(
-                    '$' + extract_answer(content)+'$',
-                    extraction_mode="first_match",
-                    extraction_config=[LatexExtractionConfig()],
-                )
-            # Reward 1 if the content is the same as the ground truth, 0 otherwise
-            reward = float(verify(answer_parsed, gold_parsed))
-            # print('\nprompt:', prompt)
-            if not silence:
-                print('-'*100)
+        answer = extract_answer(content)
+        gold_parsed, answer_parsed, reward = outcome_reward(answer, sol)
+        # print('\nprompt:', prompt)
+        if not silence:
+            print('-'*100)
+            try:
                 print('\nanswer_parsed:', answer_parsed, '\ngold_parsed:', gold_parsed, '\nreward:', reward)
-        else:
-            # For medical text answers, extract from <answer> tags and use GPT4O-mini for evaluation
-            answer_content = extract_answer(content)
-            normalized_content = normalize_text(answer_content)
-            normalized_solution = normalize_text(sol)
-            reward = evaluate_answer_similarity(normalized_content, normalized_solution)
-            if not silence:
-                print('-'*100)
-                print('\nanswer_parsed:', normalized_content, '\ngold_parsed:', normalized_solution, '\nreward:', reward)
+            except:
+                print('\nanswer_parsed:', 'NaN', '\ngold_parsed:', gold_parsed, '\nreward:', reward)
         rewards.append(reward)
+
     if not silence:
         print('\naccuracy rewards:', rewards)
 
@@ -196,49 +215,20 @@ def accuracy_thinking_reward(completions, solution, process, silence=False, **kw
     contents = [completion[0]["content"] for completion in completions]
     rewards = []
     for content, sol in zip(contents, solution):
-        # parse ground truth
-        gold_parsed = parse(
-            sol,
-            extraction_mode="first_match",
-            extraction_config=[LatexExtractionConfig()],
-        )
-        # parse predicted answer
-        answer_parsed = parse(
-            extract_answer(content),
-            extraction_mode="first_match",
-            extraction_config=[LatexExtractionConfig()],
-        )
-        if len(answer_parsed) == 0:
-            answer_parsed = parse(
-                '$' + extract_answer(content)+'$',
-                extraction_mode="first_match",
-                extraction_config=[LatexExtractionConfig()],
-            )
         # outcome reward
-        reward = float(verify(answer_parsed, gold_parsed))
+        answer = extract_answer(content)
+        gold_parsed, answer_parsed, reward = outcome_reward(answer, sol)
         # process reward
         if reward == 0.0:
             # parse ground truth process
-            gold_thinking = thinking_parse(
-                process,
-                extraction_config=[LatexExtractionConfig()],
-            )
-            if len(gold_thinking) != 0:
-                # parse predicted process
-                thinking_parsed = thinking_parse(
-                    extract_thinking(content),
-                    extraction_config=[LatexExtractionConfig()],
-                )
-                atom_reward = 0.8 / len(gold_thinking)
-                for gold_thinking in gold_thinking:
-                    for thinking in thinking_parsed:
-                        if verify(thinking, gold_thinking):
-                            print('thinking:', thinking, 'gold_thinking:', gold_thinking)
-                            reward += atom_reward
-                            break
+            thinking_completion = extract_thinking(content)
+            reward = critical_value_reward(thinking_completion, process)
         if not silence:
             print('-'*100)
-            print('\nanswer_parsed:', answer_parsed, '\ngold_parsed:', gold_parsed, '\nreward:', reward)
+            try:
+                print('\nanswer_parsed:', answer_parsed, '\ngold_parsed:', gold_parsed, '\nreward:', reward)
+            except:
+                print('\nanswer_parsed:', 'NaN', '\ngold_parsed:', gold_parsed, '\nreward:', reward)
 
         rewards.append(reward)
     if not silence:
@@ -248,78 +238,39 @@ def accuracy_thinking_reward(completions, solution, process, silence=False, **kw
         
 
 # for benchmark.py
-def eval_answer_reward(completion, answer, tag=False, silence=False, **kwargs):
+def eval_answer_reward(completion, solution, tag=False, silence=False, **kwargs):
     """Reward function that checks if the completion is the same as the ground truth."""
     '''
     input is completion string, answer is extracted gold answer.
     '''
-    gold_parsed = parse(
-        answer,
-        extraction_mode="first_match",
-        extraction_config=[LatexExtractionConfig()],
-    )
+    # outcome reward
     completion = extract_answer(completion) if tag else completion
-    answer_parsed = parse(
-        completion,
-        extraction_mode="first_match",
-        extraction_config=[LatexExtractionConfig()],
-    )
-    if len(answer_parsed) == 0 and tag:
-        answer_parsed = parse(
-            '$' + completion + '$',
-            extraction_mode="first_match",
-            extraction_config=[LatexExtractionConfig()],
-        )
-    reward = float(verify(answer_parsed, gold_parsed))
+    gold_parsed, answer_parsed, reward = outcome_reward(completion, solution)
     if not silence:
         print('-'*100)
-        print('\nanswer_parsed:', answer_parsed, '\ngold_parsed:', gold_parsed, '\nreward:', reward)
+        try:
+            print('\nanswer_parsed:', answer_parsed, '\ngold_parsed:', gold_parsed, '\nreward:', reward)
+        except:
+            print('\nanswer_parsed:', 'NaN', '\ngold_parsed:', gold_parsed, '\nreward:', reward)
+
     return reward
 
-def eval_answer_thinking_reward(completion, answer, process, tag=False, silence=False, **kwargs):
+def eval_answer_thinking_reward(completion, solution, process, tag=False, silence=False, **kwargs):
     """Reward function that checks if the completion is the same as the ground truth."""
     '''
     input is completion string, answer is extracted gold answer.
     '''
-    gold_parsed = parse(
-        answer,
-        extraction_mode="first_match",
-        extraction_config=[LatexExtractionConfig()],
-    )
     answer_completion = extract_answer(completion) if tag else completion
-    answer_parsed = parse(
-        answer_completion,
-        extraction_mode="first_match",
-        extraction_config=[LatexExtractionConfig()],
-    )
-    if len(answer_parsed) == 0 and tag:
-        answer_parsed = parse(
-            '$' + answer_completion + '$',
-            extraction_mode="first_match",
-            extraction_config=[LatexExtractionConfig()],
-        )
-    reward = float(verify(answer_parsed, gold_parsed))
+    thinking_completion = extract_thinking(completion) if tag else completion
+    gold_parsed, answer_parsed, reward = outcome_reward(answer_completion, solution)
     if reward == 0.0:
-        gold_thinking = thinking_parse(
-            process,
-            extraction_config=[LatexExtractionConfig()],
-        )
-        if len(gold_thinking) != 0:
-            thinking_completion = extract_thinking(completion) if tag else completion
-            thinking_parsed = thinking_parse(
-                thinking_completion,
-                extraction_config=[LatexExtractionConfig()],
-            )
-            atom_reward = 0.8 / len(gold_thinking)
-            for gold_thinking in gold_thinking:
-                for thinking in thinking_parsed:
-                    if verify(thinking, gold_thinking):
-                        print('thinking:', thinking, 'gold_thinking:', gold_thinking)
-                        reward += atom_reward
-                        break
+        reward = critical_value_reward(thinking_completion, process)
     if not silence:
         print('-'*100)
-        print('\nanswer_parsed:', answer_parsed, '\ngold_parsed:', gold_parsed, '\nreward:', reward)
+        try:
+            print('\nanswer_parsed:', answer_parsed, '\ngold_parsed:', gold_parsed, '\nreward:', reward)
+        except:
+            print('\nanswer_parsed:', 'NaN', '\ngold_parsed:', gold_parsed, '\nreward:', reward)
     return reward
 
 

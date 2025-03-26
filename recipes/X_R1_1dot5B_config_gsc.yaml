@@ -12,7 +12,7 @@ attn_implementation: flash_attention_2
 dataset_name: src/fol_r1/gsc
 dataset_configs:
 - train
-num_processes: 4
+num_processes: 6
 
 # GRPO trainer config
 trainer_type: "XGRPOTrainer"
@@ -36,13 +36,13 @@ logging_strategy: steps
 lr_scheduler_type: cosine
 max_prompt_length: 256
 num_generations: 12
-max_completion_length: 1024
+max_completion_length: 2048
 max_steps: -1
 num_train_epochs: 1
 output_dir: output/X-R1-1.5B
 overwrite_output_dir: true
 per_device_eval_batch_size: 1
-per_device_train_batch_size: 3
+per_device_train_batch_size: 2
 push_to_hub: False
 report_to:
 - wandb

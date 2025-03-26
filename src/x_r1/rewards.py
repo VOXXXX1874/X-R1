@@ -159,7 +159,7 @@ def outcome_reward(answer, solution):
             extraction_mode="first_match",
             extraction_config=[LatexExtractionConfig()],
         )
-    if answer_parsed[0] == nan or answer_parsed[0] == zoo:
+    if len(answer_parsed) != 0 and (answer_parsed[0] == nan or answer_parsed[0] == zoo):
         return gold_parsed, 'nan', 0.0
 
     reward = float(verify(answer_parsed, gold_parsed))
@@ -214,7 +214,7 @@ def accuracy_thinking_reward(completions, solution, process, silence=False, **kw
     """Reward function that checks if the completion is the same as the ground truth and assign partial reward for crucial thinking results."""
     contents = [completion[0]["content"] for completion in completions]
     rewards = []
-    for content, sol in zip(contents, solution):
+    for content, sol, pro in zip(contents, solution, process):
         # outcome reward
         answer = extract_answer(content)
         gold_parsed, answer_parsed, reward = outcome_reward(answer, sol)
@@ -222,7 +222,7 @@ def accuracy_thinking_reward(completions, solution, process, silence=False, **kw
         if reward == 0.0:
             # parse ground truth process
             thinking_completion = extract_thinking(content)
-            reward = critical_value_reward(thinking_completion, process)
+            reward = critical_value_reward(thinking_completion, pro)
         if not silence:
             print('-'*100)
             try:

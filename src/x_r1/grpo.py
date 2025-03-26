@@ -28,6 +28,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from configs import GRPOConfig
 from rewards import (
     accuracy_reward,
+    accuracy_thinking_reward,
     format_reward,
     get_cosine_scaled_reward,
     get_repetition_penalty_reward,
@@ -86,7 +87,6 @@ class GRPOScriptArguments(ScriptArguments):
         default=1000,
         metadata={"help": "Maximum length for scaling"},
     )
-
     repetition_n_grams: int = field(
         default=3,
         metadata={"help": "Number of n-grams for repetition penalty reward"},
@@ -106,6 +106,10 @@ class GRPOScriptArguments(ScriptArguments):
     quick_eval_dataset: str = field(
         default=None,
         metadata={"help": "Quick evaluation dataset"},
+    )
+    critical_value_reward: bool = field(
+        default=False,
+        metadata={"help": "Use critical value reward"},
     )
 
 
@@ -155,7 +159,7 @@ def main(script_args, training_args, model_args):
 
     # Get reward functions
     REWARD_FUNCS_REGISTRY = {
-        "accuracy": accuracy_reward,
+        "accuracy": accuracy_thinking_reward if script_args.critical_value_reward else accuracy_reward,
         "format": format_reward,
         "reasoning_steps": reasoning_steps_reward,
         "cosine": get_cosine_scaled_reward(

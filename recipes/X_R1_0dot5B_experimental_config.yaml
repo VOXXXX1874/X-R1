@@ -10,13 +10,14 @@ torch_dtype: bfloat16
 attn_implementation: flash_attention_2
 
 # Data training arguments
-dataset_name: xiaodongguaAIGC/X-R1-750 #  750 / 1500 / 7500
+dataset_name: src/fol_r1/gsc #  750 / 1500 / 7500
 dataset_configs:
 - train
 num_processes: 1
 
 # GRPO trainer config
 trainer_type: "XGRPOTrainer"
+critical_value_reward: true
 bf16: true
 use_vllm: false
 vllm_device: auto
@@ -52,9 +53,9 @@ warmup_ratio: 0.1
 # lora config
 # task_type: model_args.lora_task_type
 # lora_in_4bit: True # no support QLoRA
-lora_r: 32
-lora_target_modules: ["q_proj","v_proj", "k_proj", "embed_tokens"]
-lora_alpha: 8
-lora_dropout: 0.0
-bias: "none"
-use_peft: true
+#lora_r: 32
+#lora_target_modules: ["q_proj","v_proj", "k_proj", "embed_tokens"]
+#lora_alpha: 8
+#lora_dropout: 0.0
+#bias: "none"
+#use_peft: true

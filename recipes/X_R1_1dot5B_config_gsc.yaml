@@ -16,8 +16,10 @@ num_processes: 6
 
 # GRPO trainer config
 trainer_type: "XGRPOTrainer"
+reward_funcs: ['accuracy', 'thinking', 'format']
+reward_weights: [1.0, 0.6, 1.0]
 temperature: 0.6
-quick_eval_dataset: HuggingFaceH4/MATH-500
+quick_eval_dataset: src/fol_r1/gsc
 bf16: true
 use_vllm: true
 vllm_device: auto

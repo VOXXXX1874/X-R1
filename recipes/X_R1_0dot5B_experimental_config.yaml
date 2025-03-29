@@ -17,12 +17,15 @@ num_processes: 1
 
 # GRPO trainer config
 trainer_type: "XGRPOTrainer"
-critical_value_reward: true
+reward_funcs: ['accuracy', 'thinking', 'format']
+reward_weights: [1.0, 0.0, 1.0]
+temperature: 0.6
+quick_eval_dataset: src/fol_r1/gsc
 bf16: true
 use_vllm: false
 vllm_device: auto
 vllm_gpu_memory_utilization: 0.5
-do_eval: no
+do_eval: false
 eval_strategy: "no"
 eval_steps: 10
 gradient_accumulation_steps: 1

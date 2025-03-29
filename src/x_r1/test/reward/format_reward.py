@@ -4,7 +4,7 @@ def format_reward(completions, silence=False, **kwargs):
     """Reward function that checks if the completion has a specific format."""
     pattern = r"^<think>.*?</think>\s*<answer>.*?</answer>$"
     completion_contents = [completion for completion in completions]
-    matches = [re.match(pattern, content) for content in completion_contents]
+    matches = [re.match(pattern, content, re.DOTALL) for content in completion_contents]
 
     rewards = [1.0 if match else 0.0 for match in matches]
     if not silence:

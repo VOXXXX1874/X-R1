@@ -177,7 +177,7 @@ def critical_value_reward(thinking_completion, process):
             thinking_completion,
             extraction_config=[LatexExtractionConfig()],
         )
-        atom_reward = 0.6 / len(gold_steps)
+        atom_reward = 1.0 / len(gold_steps)
         for gold_step in gold_steps:
             for step_parsed in steps_parsed:
                 if step_parsed == nan or step_parsed == zoo:
@@ -210,29 +210,17 @@ def accuracy_reward(completions, solution, silence=False, **kwargs):
 
     return rewards
 
-def accuracy_thinking_reward(completions, solution, process, silence=False, **kwargs):
+def thinking_reward(completions, solution, process, silence=False, **kwargs):
     """Reward function that checks if the completion is the same as the ground truth and assign partial reward for crucial thinking results."""
     contents = [completion[0]["content"] for completion in completions]
     rewards = []
-    for content, sol, pro in zip(contents, solution, process):
-        # outcome reward
-        answer = extract_answer(content)
-        gold_parsed, answer_parsed, reward = outcome_reward(answer, sol)
-        # process reward
-        if reward == 0.0:
-            # parse ground truth process
-            thinking_completion = extract_thinking(content)
-            reward = critical_value_reward(thinking_completion, pro)
-        if not silence:
-            print('-'*100)
-            try:
-                print('\nanswer_parsed:', answer_parsed, '\ngold_parsed:', gold_parsed, '\nreward:', reward)
-            except:
-                print('\nanswer_parsed:', 'NaN', '\ngold_parsed:', gold_parsed, '\nreward:', reward)
-
+    for content, pro in zip(contents, process):
+        # parse ground truth process
+        thinking_completion = extract_thinking(content)
+        reward = critical_value_reward(thinking_completion, pro)
         rewards.append(reward)
     if not silence:
-        print('\naccuracy thinking rewards:', rewards)
+        print('\nThinking rewards:', rewards)
 
     return rewards
         
@@ -255,22 +243,18 @@ def eval_answer_reward(completion, solution, tag=False, silence=False, **kwargs)
 
     return reward
 
-def eval_answer_thinking_reward(completion, solution, process, tag=False, silence=False, **kwargs):
+def eval_thinking_reward(completion, solution, process, tag=False, silence=False, **kwargs):
     """Reward function that checks if the completion is the same as the ground truth."""
     '''
     input is completion string, answer is extracted gold answer.
     '''
-    answer_completion = extract_answer(completion) if tag else completion
     thinking_completion = extract_thinking(completion) if tag else completion
-    gold_parsed, answer_parsed, reward = outcome_reward(answer_completion, solution)
-    if reward == 0.0:
-        reward = critical_value_reward(thinking_completion, process)
+    reward = critical_value_reward(thinking_completion, process)
     if not silence:
-        print('-'*100)
         try:
-            print('\nanswer_parsed:', answer_parsed, '\ngold_parsed:', gold_parsed, '\nreward:', reward)
+            print('\nthinking_reward:', reward)
         except:
-            print('\nanswer_parsed:', 'NaN', '\ngold_parsed:', gold_parsed, '\nreward:', reward)
+            print('\nthinking_reward:', reward)
     return reward
 
 
@@ -278,7 +262,7 @@ def format_reward(completions, silence=False, **kwargs):
     """Reward function that checks if the completion has a specific format."""
     pattern = r"^<think>.*?</think>\s*<answer>.*?</answer>$"
     completion_contents = [completion[0]["content"] for completion in completions]
-    matches = [re.match(pattern, content) for content in completion_contents]
+    matches = [re.match(pattern, content, re.DOTALL) for content in completion_contents]
 
     rewards = [1.0 if match else 0.0 for match in matches]
     if not silence:

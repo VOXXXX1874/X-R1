@@ -70,6 +70,13 @@ def prepare_quick_eval_dataset(dataset_name):
         quick_eval_dataset = quick_eval_dataset['test']
         # display one example from the dataset
         print('Example from quick_eval_dataset:', quick_eval_dataset[0])
+    elif dataset_name == "src/fol_r1/gsc":
+        quick_eval_dataset = quick_eval_dataset.rename_column("answer", "solution")
+        quick_eval_dataset = quick_eval_dataset.map(make_latex)
+        quick_eval_dataset = quick_eval_dataset.map(make_conversation)
+        quick_eval_dataset = quick_eval_dataset['test']
+        # display one example from the dataset
+        print('Example from quick_eval_dataset:', quick_eval_dataset[0])
     else:
         raise ValueError(f"Invalid quick eval dataset: {dataset_name}")
     

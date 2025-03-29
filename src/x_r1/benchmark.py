@@ -18,7 +18,7 @@ from vllm import LLM, SamplingParams
 import argparse
 import json
 from utils.prepare_dataset import SYSTEM_PROMPT
-from rewards import eval_answer_reward, eval_answer_thinking_reward
+from rewards import eval_answer_reward, eval_thinking_reward
 # import torch
 import re
 from transformers import AutoTokenizer 
@@ -102,7 +102,7 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
     # # vllm generation
     outputs = llm.generate(prompts,
                            sampling_params,)
-    
+    pro_scores = []
     acc_scores = []
     format_scores = []
     result_all = []
@@ -117,8 +117,10 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
         if args.reward_function == 'eval_answer_reward':
             acc_score = eval_answer_reward(completion, gold_answer, args.tag, silence=False)
         elif args.reward_function == 'eval_answer_thinking_reward':
-            acc_score = eval_answer_thinking_reward(completion, gold_answer, gold_process, args.tag, silence=False)
+            acc_score = eval_answer_reward(completion, gold_answer, args.tag, silence=False)
+            pro_score = eval_thinking_reward(completion, gold_answer, gold_process, args.tag, silence=False)
         acc_scores.append(acc_score)
+        pro_scores.append(pro_score if args.reward_function == 'eval_answer_thinking_reward' else 0)
         total_acc = total_acc + acc_score
 
         format_score = format_reward(completion)
@@ -134,11 +136,13 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
             'completion': completion, 
             'gold answer': gold_answer, 
             'acc scores': acc_score,  
+            'pro scores': pro_score,
             'format score': format_score, 
         })
 
     print('='*100)
     print('eval acc: ', total_acc / len(acc_scores))
+    print('eval pro: ', sum(pro_scores) / len(pro_scores))
     print('eval format: ',total_format / len(format_scores))
 
     current_result_file = output_name + '.json'

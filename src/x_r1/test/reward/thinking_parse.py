@@ -114,13 +114,18 @@ pm_gold_parsed = thinking_parse(
 #print("gold_parsed", gold_parsed)
 #print("pm_gold_parsed", pm_gold_parsed)
 
+atomic_reward = 1.0/len(gold_parsed)
+reward = 0.0
 for parsed_results in gold_parsed:
     for pm_parsed_results in pm_gold_parsed:
         if verify(parsed_results, pm_parsed_results):
             print("parsed_results", parsed_results)
             print("pm_parsed_results", pm_parsed_results)
             print("verified")
+            reward += atomic_reward
             break
 
 print("--- %s seconds ---" % (time.time() - start_time))
 
+print("reward", reward)
+print("atomic_reward", atomic_reward)

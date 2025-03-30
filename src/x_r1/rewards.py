@@ -224,6 +224,25 @@ def thinking_reward(completions, solution, process, silence=False, **kwargs):
 
     return rewards
         
+def accuracy_thinking_reward(completions, solution, process, silence=False, **kwargs):
+    """Reward function that checks if the completion is the same as the ground truth and assign partial reward for crucial thinking results."""
+    contents = [completion[0]["content"] for completion in completions]
+    rewards = []
+    for content, sol, pro in zip(contents, solution, process):
+        # outcome reward
+        answer = extract_answer(content)
+        gold_parsed, answer_parsed, reward = outcome_reward(answer, sol)
+        # process reward
+        if reward == 0.0:
+            # parse ground truth process
+            thinking_completion = extract_thinking(content)
+            reward = critical_value_reward(thinking_completion, pro) * 0.6
+
+        rewards.append(reward)
+    if not silence:
+        print('\naccuracy thinking rewards:', rewards)
+
+    return rewards
 
 # for benchmark.py
 def eval_answer_reward(completion, solution, tag=False, silence=False, **kwargs):
@@ -266,8 +285,8 @@ def format_reward(completions, silence=False, **kwargs):
 
     rewards = [1.0 if match else 0.0 for match in matches]
     if not silence:
-        print('-'*100)
         print('\nformat rewards:', rewards)
+        print('-'*100)
     return rewards
 
 

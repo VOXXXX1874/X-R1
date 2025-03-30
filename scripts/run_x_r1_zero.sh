@@ -48,9 +48,15 @@ ACCELERATE_LOG_LEVEL=info accelerate launch \
 
 ACCELERATE_LOG_LEVEL=info accelerate launch \
 --config_file recipes/zero3.yaml \
---num_processes=4 src/x_r1/grpo.py \
+--num_processes=6 src/x_r1/grpo.py \
 --config recipes/X_R1_1dot5B_config_gsc.yaml \
 > ./output/x_r1_1dot5B_sampling.log 2>&1
+
+ACCELERATE_LOG_LEVEL=info accelerate launch \
+--config_file recipes/zero3.yaml \
+--num_processes=6 src/x_r1/grpo.py \
+--config recipes/X_R1_1dot5B_config_gsc.yaml \
+> ./output/x_r1_1dot5B_sampling-1.log 2>&1
 
 # supervised
 ACCELERATE_LOG_LEVEL=info accelerate launch \

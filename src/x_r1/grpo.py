@@ -27,6 +27,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from configs import GRPOConfig
 from rewards import (
+    accuracy_thinking_reward,
     accuracy_reward,
     thinking_reward,
     format_reward,
@@ -159,6 +160,7 @@ def main(script_args, training_args, model_args):
 
     # Get reward functions
     REWARD_FUNCS_REGISTRY = {
+        "accuracy_thinking": accuracy_thinking_reward,
         "accuracy": accuracy_reward,
         "thinking": thinking_reward,
         "format": format_reward,

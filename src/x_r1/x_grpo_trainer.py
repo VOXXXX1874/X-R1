@@ -461,7 +461,9 @@ class XGRPOTrainer(GRPOTrainer):
                             print('Ignore the reward model')
                         else:
                             # Repeat all input columns (but "prompt" and "completion") to match the number of generations
-                            reward_kwargs = {'solution': [example['solution'] for example in self.quick_eval_dataset]}
+                            # FIXME: Compatible with different train and eval dataset
+                            keys = [key for key in inputs[0] if key not in ["prompt", "completion"]]
+                            reward_kwargs = {key: [example[key] for example in self.quick_eval_dataset] for key in keys}
                             output_reward_func = reward_func(completions=quick_eval_completions, silence = True, **reward_kwargs)
                             quick_eval_rewards[:, i] = torch.tensor(output_reward_func, dtype=torch.float32, device=device)
                             # write the reward to the metrics

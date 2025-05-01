@@ -48,6 +48,10 @@ class GRPOConfig(trl.GRPOConfig):
         default=None,
         metadata={"help": ("The project to store runs under.")},
     )
+    part_of_gradient: bool = field(
+        default=False,
+        metadata={"help": "Apply gradient to part of the incorrect answer"},
+    )
 
 
 

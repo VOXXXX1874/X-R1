@@ -39,6 +39,7 @@ def extract_target_from_pred(
     Returns all sucesffuly extracted match.
     """
     extracted_predictions = []
+    predictions_end_pos = []
 
     # Get all patterns and sort by priority
     all_patterns = [
@@ -59,7 +60,7 @@ def extract_target_from_pred(
     )
 
     # Try to extract from each match, starting from rightmost
-    for match, _, _, target_type in matches_with_pos:
+    for match, _, end_position, target_type in matches_with_pos:
         # Find the last '=' in the match
         last_eq = match.group(0).rfind("=")
         # If there is an '=', extract from the right side of the '=' and perform further extraction
@@ -87,8 +88,9 @@ def extract_target_from_pred(
 
         if extracted_match is not None:
             extracted_predictions.append(extracted_match)
+            predictions_end_pos.append(end_position)
 
-    return extracted_predictions
+    return extracted_predictions, predictions_end_pos
 
 # Read solution from solution.txt
 with open("src/x_r1/test/reward/solution.md", "r") as file:
@@ -101,31 +103,34 @@ with open("src/x_r1/test/reward/solution_pm.md", "r") as file:
 # Count the time taken to parse and verify the solution
 start_time = time.time()
 
-gold_parsed = thinking_parse(
+gold_parsed, gold_end_pos = thinking_parse(
     extract_thinking(solution),
     extraction_config=[LatexExtractionConfig()],
 )
 
-pm_gold_parsed = thinking_parse(
+pm_gold_parsed, _ = thinking_parse(
     extract_thinking(solution_pm),
     extraction_config=[LatexExtractionConfig()],
 )
 
-#print("gold_parsed", gold_parsed)
-#print("pm_gold_parsed", pm_gold_parsed)
+print("gold_parsed", gold_parsed, "gold_end_pos", gold_end_pos)
+print("pm_gold_parsed", pm_gold_parsed)
 
 atomic_reward = 1.0/len(gold_parsed)
 reward = 0.0
-for parsed_results in gold_parsed:
+final_end_pos = 0
+for parsed_results, end_pos in zip(gold_parsed, gold_end_pos):
     for pm_parsed_results in pm_gold_parsed:
         if verify(parsed_results, pm_parsed_results):
             print("parsed_results", parsed_results)
             print("pm_parsed_results", pm_parsed_results)
             print("verified")
             reward += atomic_reward
+            final_end_pos = end_pos
             break
 
 print("--- %s seconds ---" % (time.time() - start_time))
 
 print("reward", reward)
 print("atomic_reward", atomic_reward)
+print("final_end_pos", final_end_pos)

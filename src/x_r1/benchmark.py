@@ -112,15 +112,16 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
         prompt = output.prompt
         completion = output.outputs[0].text
 
-        # print("Prompt: ", prompt)
-        # print("completion:", completion)
+        print("Prompt: ", prompt)
+        print("completion:", completion)
         if args.reward_function == 'eval_answer_reward':
-            acc_score = eval_answer_reward(completion, gold_answer, args.tag, silence=False)
+            acc_score, _ = eval_answer_reward(completion, gold_answer, args.tag, silence=False)
+            pro_score = 0
         elif args.reward_function == 'eval_answer_thinking_reward':
-            acc_score = eval_answer_reward(completion, gold_answer, args.tag, silence=False)
-            pro_score = eval_thinking_reward(completion, gold_answer, gold_process, args.tag, silence=False)
+            acc_score, _ = eval_answer_reward(completion, gold_answer, args.tag, silence=False)
+            pro_score, step_end_pos = eval_thinking_reward(completion, gold_answer, gold_process, args.tag, silence=False)
         acc_scores.append(acc_score)
-        pro_scores.append(pro_score if args.reward_function == 'eval_answer_thinking_reward' else 0)
+        pro_scores.append(pro_score)
         total_acc = total_acc + acc_score
 
         format_score = format_reward(completion)

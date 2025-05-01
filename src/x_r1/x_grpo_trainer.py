@@ -363,6 +363,9 @@ class XGRPOTrainer(GRPOTrainer):
         else:
             self.quick_eval_dataset = None
 
+        # how to apply gradient
+        self.part_of_gradient = args.part_of_gradient
+
     def _move_model_to_vllm(self):
         # https://github.com/huggingface/trl/issues/2840#issuecomment-2662747485
         for param in self.model.parameters():
@@ -559,6 +562,7 @@ class XGRPOTrainer(GRPOTrainer):
             completions = completions_text
 
         rewards_per_func = torch.zeros(len(prompts), len(self.reward_funcs), device=device)
+        completion_mask_adjustment = []
         for i, (reward_func, reward_processing_class) in enumerate(
             zip(self.reward_funcs, self.reward_processing_classes)
         ):
@@ -578,7 +582,9 @@ class XGRPOTrainer(GRPOTrainer):
                 # Repeat all input columns (but "prompt" and "completion") to match the number of generations
                 keys = [key for key in inputs[0] if key not in ["prompt", "completion"]]
                 reward_kwargs = {key: [example[key] for example in inputs] for key in keys}
-                output_reward_func = reward_func(prompts=prompts, completions=completions, **reward_kwargs)
+                output_reward_func, steps_final_pos = reward_func(prompts=prompts, completions=completions, **reward_kwargs)
+                if len(steps_final_pos) > 0 and self.part_of_gradient:
+                    completion_mask_adjustment = steps_final_pos
                 rewards_per_func[:, i] = torch.tensor(output_reward_func, dtype=torch.float32, device=device)
 
         # Gather the reward per function: this part is crucial, because the rewards are normalized per group and the
@@ -599,6 +605,8 @@ class XGRPOTrainer(GRPOTrainer):
         advantages = (rewards - mean_grouped_rewards) / (std_grouped_rewards + 1e-4)
 
         print('advantage:', advantages)
+        print('completion_mask:', completion_mask, "sum:", completion_mask.sum())
+        print('completion_mask_adjustment:', completion_mask_adjustment)
 
         # Slice to keep only the local part of the data
         process_slice = slice(
@@ -606,6 +614,23 @@ class XGRPOTrainer(GRPOTrainer):
             (self.accelerator.process_index + 1) * len(prompts),
         )
         advantages = advantages[process_slice]
+
+        # Adjust the completion mask if needed
+        if self.part_of_gradient:
+            for i in range(len(completion_mask_adjustment)):
+                if completion_mask_adjustment[i] != 0 and advantages[i] < 0:
+                    text = completions_text[i]
+                    char_pos = completion_mask_adjustment[i]
+                    # Re-tokenize
+                    encoding = self.processing_class(text, return_offsets_mapping=True, add_special_tokens=False)
+                    offsets = encoding["offset_mapping"]
+                    target_token_idx = -1
+                    for token_idx, (start, end) in enumerate(offsets):
+                        # Find the first token that *ends* after the target character position.
+                        if end > char_pos:
+                            target_token_idx = token_idx
+                            break
+                    completion_mask[i, :target_token_idx + 1] = 0
 
         # Log the metrics
         reward_per_func = rewards_per_func.mean(0)

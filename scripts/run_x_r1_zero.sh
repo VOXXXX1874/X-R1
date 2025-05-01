@@ -120,6 +120,15 @@ CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
 	--reward_function='eval_answer_reward' \
 	--tag False > output/benchmark_sampling.log 2>&1
 
+CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
+	--model_name='records/X-R1-1.5B_gsc_g4_2048_cv' \
+    --dataset_name='src/fol_r1/gsc' \
+	--output_name='./output/result_benchmark_gsc'  \
+	--max_output_tokens=2048 \
+	--num_gpus=1 \
+	--reward_function='eval_answer_reward' \
+	--tag True > output/benchmark_sampling.log 2>&1
+
 # data
 
 python src/fol_r1/gsc/generate.py --num_of_var 5 --num_of_generation 4 --num_of_questions 8000

@@ -18,7 +18,8 @@ num_processes: 1
 # GRPO trainer config
 trainer_type: "XGRPOTrainer"
 reward_funcs: ['accuracy', 'thinking', 'format']
-reward_weights: [1.0, 0.0, 1.0]
+reward_weights: [1.0, 0.6, 1.0]
+part_of_gradient: True
 temperature: 0.6
 quick_eval_dataset: src/fol_r1/gsc
 bf16: true

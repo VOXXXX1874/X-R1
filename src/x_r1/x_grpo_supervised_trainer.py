@@ -365,3 +365,8 @@ class XGRPOSupervisedTrainer(XGRPOTrainer):
             self.run_quick_eval = False
         else:
             self.quick_eval_dataset = None
+
+        # how to apply gradient
+        self.part_of_gradient = args.part_of_gradient
+        # Use regex to parse steps
+        self.regex = args.regex

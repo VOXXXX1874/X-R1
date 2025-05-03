@@ -1,7 +1,7 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model_name = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
-#model_name = "Qwen/Qwen2.5-Math-1.5B-Instruct"
+#model_name = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+model_name = "Qwen/Qwen2.5-1.5B-Instruct"
 device = "cuda" # the device to load the model onto
 
 # Read question from question.txt

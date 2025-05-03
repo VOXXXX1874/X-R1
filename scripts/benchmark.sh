@@ -1,0 +1,61 @@
+# benchmark
+
+CUDA_VISIBLE_DEVICES=0,1,2,3 python ./src/x_r1/benchmark.py \
+	--model_name='records/X-R1-3B_0' \
+    --dataset_name='HuggingFaceH4/MATH-500' \
+	--output_name='./output/result_benchmark_math500'  \
+	--max_output_tokens=2048 \
+	--num_gpus=4 > output/benchmark_sampling.log 2>&1
+
+CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
+	--model_name='records/X-R1-3B-7500-epoch1' \
+    --dataset_name='HuggingFaceH4/MATH-500' \
+	--output_name='./output/result_benchmark_math500'  \
+	--max_output_tokens=2048 \
+	--num_gpus=1 > output/benchmark_sampling.log 2>&1
+
+CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
+	--model_name='Qwen/Qwen2.5-0.5B-Instruct' \
+    --dataset_name='HuggingFaceH4/MATH-500' \
+	--output_name='./output/result_benchmark_math500'  \
+	--max_output_tokens=2048 \
+	--num_gpus=1 \
+	--reward_function='eval_answer_reward' \
+	--tag False > output/benchmark_sampling.log 2>&1
+
+CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
+	--model_name='Qwen/Qwen2.5-0.5B-Instruct' \
+    --dataset_name='HuggingFaceH4/MATH-500' \
+	--output_name='./output/result_benchmark_math500'  \
+	--max_output_tokens=2048 \
+	--num_gpus=1 \
+	--reward_function='eval_answer_thinking_reward' \
+	--tag False > output/benchmark_sampling.log 2>&1
+
+CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
+	--model_name='Qwen/Qwen2.5-3B-Instruct' \
+    --dataset_name='src/fol_r1/gsc' \
+	--output_name='./output/result_benchmark_gsc'  \
+	--max_output_tokens=2048 \
+	--num_gpus=1 \
+	--reward_function='eval_answer_reward' \
+	--tag False > output/benchmark_sampling.log 2>&1
+
+CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
+	--model_name='records/X-R1-1.5B_gsc_g4_2048_cv' \
+    --dataset_name='src/fol_r1/gsc' \
+	--output_name='./output/result_benchmark_gsc'  \
+	--max_output_tokens=2048 \
+	--num_gpus=1 \
+	--reward_function='eval_answer_reward' \
+	--tag True > output/benchmark_sampling.log 2>&1
+
+CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
+	--model_name='Qwen/Qwen2.5-3B-Instruct' \
+    --dataset_name='src/cv_extraction/MATH-500/exp' \
+	--output_name='./output/result_benchmark_math500'  \
+	--max_output_tokens=4096 \
+	--num_gpus=1 \
+	--reward_function='eval_answer_thinking_reward' \
+	--tag False \
+	--regex True > output/benchmark_sampling.log 2>&1

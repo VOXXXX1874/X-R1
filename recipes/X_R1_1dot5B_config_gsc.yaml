@@ -23,6 +23,8 @@ reward_weights: [1.0, 0.6, 1.0]
 #reward_weights: [0.0, 0.0, 1.0, 1.0]
 part_of_gradient: True
 # part_of_gradient: False
+regex: False
+# regex: True
 temperature: 0.6
 quick_eval_dataset: src/fol_r1/gsc
 bf16: true

@@ -52,6 +52,10 @@ class GRPOConfig(trl.GRPOConfig):
         default=False,
         metadata={"help": "Apply gradient to part of the incorrect answer"},
     )
+    regex: bool = field(
+        default=False,
+        metadata={"help": "Use regex to match the steps."},
+    )
 
 
 

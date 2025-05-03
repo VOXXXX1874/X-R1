@@ -115,11 +115,11 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
         print("Prompt: ", prompt)
         print("completion:", completion)
         if args.reward_function == 'eval_answer_reward':
-            acc_score, _ = eval_answer_reward(completion, gold_answer, args.tag, silence=False)
+            acc_score, _ = eval_answer_reward(completion, gold_answer, args.tag, regex = args.regex, silence = False)
             pro_score = 0
         elif args.reward_function == 'eval_answer_thinking_reward':
-            acc_score, _ = eval_answer_reward(completion, gold_answer, args.tag, silence=False)
-            pro_score, step_end_pos = eval_thinking_reward(completion, gold_answer, gold_process, args.tag, silence=False)
+            acc_score, _ = eval_answer_reward(completion, gold_answer, args.tag, regex = args.regex, silence = False)
+            pro_score, step_end_pos = eval_thinking_reward(completion, gold_answer, gold_process, args.tag, regex = args.regex, silence = False)
         acc_scores.append(acc_score)
         pro_scores.append(pro_score)
         total_acc = total_acc + acc_score
@@ -170,7 +170,9 @@ if __name__ == "__main__":
     parser.add_argument('--reward_function', type=str, default='eval_answer_reward',
                         help='reward function')
     parser.add_argument('--tag', type=lambda x: (str(x).lower() == 'true'), default=True,
-                        help='tag')
+                        help='tag or not')
+    parser.add_argument('--regex', type=lambda x: (str(x).lower() == 'true'), default=True,
+                        help='regex or not')
     args = parser.parse_args()
     print(args)
 

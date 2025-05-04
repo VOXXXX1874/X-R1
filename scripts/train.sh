@@ -7,6 +7,15 @@ src/x_r1/grpo.py \
 --config recipes/X_R1_0dot5B_experimental_config.yaml \
 > ./output/x_r1_experimental_sampling.log 2>&1
 
+# 2 3090
+ACCELERATE_LOG_LEVEL=info \
+accelerate launch \
+--config_file recipes/zero3.yaml \
+--num_processes=1 \
+src/x_r1/grpo.py \
+--config recipes/X_R1_0dot5B_experimental_config.yaml \
+> ./output/x_r1_experimental_sampling.log 2>&1
+
 # remember export LD_LIBRARY_PATH=/research/d2/spc/zzchen2/anaconda/envs/xr1/lib:$LD_LIBRARY_PATH
 # If the ubuntu version is lower than 20.04, then the offload_param in zero3.yaml should be set to none
 

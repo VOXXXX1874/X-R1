@@ -13,7 +13,7 @@ attn_implementation: flash_attention_2
 dataset_name: src/cv_extraction/XR1-7500/exp
 dataset_configs:
 - train
-num_processes: 1
+num_processes: 2
 
 # GRPO trainer config
 trainer_type: "XGRPOTrainer"
@@ -24,7 +24,7 @@ regex: True
 temperature: 0.6
 quick_eval_dataset: src/cv_extraction/MATH-500/exp
 bf16: true
-use_vllm: false
+use_vllm: True
 vllm_device: auto
 vllm_gpu_memory_utilization: 0.5
 do_eval: false

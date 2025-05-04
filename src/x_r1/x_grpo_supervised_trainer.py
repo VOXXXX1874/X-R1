@@ -58,6 +58,7 @@ if is_peft_available():
 
 if is_vllm_available():
     from vllm import LLM, SamplingParams
+    from vllm.sampling_params import GuidedDecodingParams
 
 if is_wandb_available():
     import wandb
@@ -208,13 +209,13 @@ class XGRPOSupervisedTrainer(XGRPOTrainer):
         self.use_vllm = args.use_vllm
 
         # Multi-step
-        # self.num_iterations = args.num_iterations  # = 𝜇 in the GRPO paper
-        # self.epsilon = args.epsilon
+        self.num_iterations = args.num_iterations  # = 𝜇 in the GRPO paper
+        self.epsilon = args.epsilon
         # Tracks the number of iterations (forward + backward passes), including those within a gradient accumulation cycle.
         self._step = 0
         # Buffer the batch to reuse generated outputs across multiple updates. For more details, see
         # `_get_train_sampler` and `_prepare_inputs`.
-        # self._buffered_inputs = [None] * args.gradient_accumulation_steps
+        self._buffered_inputs = [None] * args.gradient_accumulation_steps
 
         # The trainer estimates the number of FLOPs (floating-point operations) using the number of elements in the
         # input tensor associated with the key "input_ids". However, in GRPO, the sampled data does not include the
@@ -225,10 +226,10 @@ class XGRPOSupervisedTrainer(XGRPOTrainer):
         model.warnings_issued["estimate_tokens"] = True
 
         # Initialize the metrics
-        self._metrics = defaultdict(list)
+        self._metrics = {"train": defaultdict(list), "eval": defaultdict(list)}
         self.log_completions = args.log_completions
 
-        Trainer.__init__(self,
+        Trainer.__init__(
             model=model,
             args=args,
             data_collator=data_collator,
@@ -310,14 +311,22 @@ class XGRPOSupervisedTrainer(XGRPOTrainer):
                         # Automatic Prefix Caching caches the KV cache of existing queries, so that a new query can
                         # directly reuse the KV cache if it shares the same prefix with one of the existing queries.
                         # This is particularly useful here because we generate completions from the same prompts.
-                        enable_prefix_caching=True,
+                        enable_prefix_caching=self.args.vllm_enable_prefix_caching,
                         max_model_len=self.args.vllm_max_model_len,
                     )
-                print('Temperature is:', args.temperature)
+
+                # Guided decoding, if enabled
+                if args.vllm_guided_decoding_regex is not None:
+                    guided_decoding = GuidedDecodingParams(backend="outlines", regex=args.vllm_guided_decoding_regex)
+                else:
+                    guided_decoding = None
+
+                # Sampling parameters
                 self.sampling_params = SamplingParams(
                     temperature=args.temperature,
                     max_tokens=self.max_completion_length,
-                    # n=args.num_generations,
+                    guided_decoding=guided_decoding,
+                    n=args.num_generations,
                 )
 
             self._last_loaded_step = 0  # tag to avoid useless loading during grad accumulation
@@ -348,7 +357,7 @@ class XGRPOSupervisedTrainer(XGRPOTrainer):
             else:
                 self.ref_model = self.accelerator.prepare_model(self.ref_model, evaluation_mode=True)
 
-        if args.sync_ref_model and reference_model == model_id:
+        if args.sync_ref_model:
             self.add_callback(SyncRefModelCallback(ref_model=self.ref_model, accelerator=self.accelerator))
 
         for i, reward_func in enumerate(self.reward_funcs):

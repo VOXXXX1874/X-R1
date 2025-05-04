@@ -214,19 +214,12 @@ class XGRPOTrainer(GRPOTrainer):
                             self._metrics[f"quick_eval_rewards/{reward_func.__name__}"].append(quick_eval_rewards[:, i].mean().item())
                     self.run_quick_eval = False
 
-                outputs = self.llm.generate(all_prompts_text, sampling_params=self.sampling_params, use_tqdm=False)
+                ordered_set_of_prompts = list(dict.fromkeys(all_prompts_text))
+                outputs = self.llm.generate(
+                    ordered_set_of_prompts, sampling_params=self.sampling_params, use_tqdm=False
+                )
 
                 completion_ids = [out.token_ids for completions in outputs for out in completions.outputs]
-                for output in outputs:
-                    print('-'*100)
-                    print('\n\n\n')
-                    prompt = output.prompt
-                    for output_t in  output.outputs:
-                        # print(completion_ids)
-                        print('='*100)
-                        generated_text = output_t.text
-                        print("【USER】: ", prompt )
-                        print("\n【ASSISTANT】:", generated_text)
             else:
                 completion_ids = [None] * len(all_prompts_text)
             # Broadcast the completions from the main process to all processes, ensuring each process receives its
@@ -270,7 +263,7 @@ class XGRPOTrainer(GRPOTrainer):
 
         logits_to_keep = completion_ids.size(1)  # we only need to compute the logits for the completion tokens
 
-        with torch.inference_mode():
+        with torch.no_grad():
             # When using num_iterations == 1, old_per_token_logps == per_token_logps, so we can skip it's
             # computation here, and use per_token_logps.detach() instead.
             if self.num_iterations > 1:
@@ -317,7 +310,7 @@ class XGRPOTrainer(GRPOTrainer):
                     texts, return_tensors="pt", padding=True, padding_side="right", add_special_tokens=False
                 )
                 reward_inputs = Trainer._prepare_inputs(self, inputs = reward_inputs)
-                with torch.inference_mode():
+                with torch.no_grad():
                     rewards_per_func[:, i] = reward_func(**reward_inputs).logits[:, 0]  # Shape (B*G,)
             else:
                 # Repeat all input columns (but "prompt" and "completion") to match the number of generations

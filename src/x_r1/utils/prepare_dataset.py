@@ -30,7 +30,7 @@ def prepare_dataset(dataset_name, split):
         })
 
     # if DeepScaleR-Preview-Dataset in the name of the dataset, then we need to remove the solution column and rename answer column to solution
-    if "DeepScaleR-Preview-Dataset" in dataset_name:
+    if "DeepScaleR" in dataset_name:
         # Take half of the dataset
         dataset[split] = dataset[split].select(range(len(dataset[split])//2))
 
@@ -38,7 +38,7 @@ def prepare_dataset(dataset_name, split):
         dataset = dataset.rename_columns({"answer": "solution"})
         
         dataset = dataset.map(make_latex)
-    elif dataset_name == "src/fol_r1/gsc":
+    elif "gsc" in dataset_name:
         dataset = dataset.rename_columns({"answer": "solution"})
         dataset = dataset.map(make_latex)
 
@@ -52,7 +52,7 @@ def prepare_dataset(dataset_name, split):
 def prepare_quick_eval_dataset(dataset_name):
     quick_eval_dataset = load_dataset(dataset_name)
 
-    if dataset_name == "Maxwell-Jia/AIME_2024":
+    if "AIME_2024" in dataset_name:
         quick_eval_dataset = quick_eval_dataset.remove_columns("Solution")
         quick_eval_dataset = quick_eval_dataset.remove_columns("ID")
         quick_eval_dataset = quick_eval_dataset.rename_column("Answer", "solution")
@@ -62,7 +62,7 @@ def prepare_quick_eval_dataset(dataset_name):
         quick_eval_dataset = quick_eval_dataset['train']
         # display one example from the dataset
         print('Example from quick_eval_dataset:', quick_eval_dataset[0])
-    elif dataset_name == "HuggingFaceH4/MATH-500":
+    elif "MATH-500" in dataset_name:
         quick_eval_dataset = quick_eval_dataset.remove_columns("solution")
         quick_eval_dataset = quick_eval_dataset.rename_column("answer", "solution")
         quick_eval_dataset = quick_eval_dataset.map(make_latex)
@@ -70,7 +70,7 @@ def prepare_quick_eval_dataset(dataset_name):
         quick_eval_dataset = quick_eval_dataset['test']
         # display one example from the dataset
         print('Example from quick_eval_dataset:', quick_eval_dataset[0])
-    elif dataset_name == "src/fol_r1/gsc":
+    elif "gsc" in dataset_name:
         quick_eval_dataset = quick_eval_dataset.rename_column("answer", "solution")
         quick_eval_dataset = quick_eval_dataset.map(make_latex)
         quick_eval_dataset = quick_eval_dataset.map(make_conversation)

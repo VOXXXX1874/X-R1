@@ -181,13 +181,18 @@ class XGRPOTrainer(GRPOTrainer):
             # Generate completions using vLLM: gather all prompts and use them in a single call in the main process
             all_prompts_text = gather_object(prompts_text)
             if self.accelerator.is_main_process:
-                if self.quick_eval_dataset is not None and self.state.global_step % self.args.eval_steps == 1:
+                if self.quick_eval_dataset is not None and (self.state.global_step/self.num_iterations) % self.args.eval_steps == 1:
                     self.run_quick_eval = True
                 # perform quick eval with the quick eval dataset if step is a multiple of eval_steps
-                if self.quick_eval_dataset is not None and self.state.global_step % self.args.eval_steps == 0 and self.run_quick_eval:
+                if self.quick_eval_dataset is not None and (self.state.global_step/self.num_iterations) % self.args.eval_steps == 0 and self.run_quick_eval:
                     quick_eval_outputs = self.llm.generate(
                         [x["prompt"] for x in self.quick_eval_dataset],
-                        sampling_params=self.sampling_params,
+                        sampling_params=SamplingParams(
+                            temperature=self.sampling_params.temperature,
+                            max_tokens=self.max_completion_length,
+                            guided_decoding=self.sampling_params.guided_decoding,
+                            n=1,
+                        ),
                         use_tqdm=False,
                     )
                     quick_eval_completion_ids = [out.token_ids for completions in quick_eval_outputs for out in completions.outputs]
@@ -211,7 +216,7 @@ class XGRPOTrainer(GRPOTrainer):
                             output_reward_func, steps_final_pos = reward_func(completions=quick_eval_completions, regex = self.regex, silence = True, **reward_kwargs)
                             quick_eval_rewards[:, i] = torch.tensor(output_reward_func, dtype=torch.float32, device=device)
                             # write the reward to the metrics
-                            self._metrics[f"quick_eval_rewards/{reward_func.__name__}"].append(quick_eval_rewards[:, i].mean().item())
+                            self._metrics['train'][f"quick_eval_rewards/{reward_func.__name__}"].append(quick_eval_rewards[:, i].mean().item())
                     self.run_quick_eval = False
 
                 ordered_set_of_prompts = list(dict.fromkeys(all_prompts_text))

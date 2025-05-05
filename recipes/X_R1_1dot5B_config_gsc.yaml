@@ -59,3 +59,4 @@ report_to:
 save_strategy: "epoch"
 seed: 42
 warmup_ratio: 0.1
+use_liger_kernel: true

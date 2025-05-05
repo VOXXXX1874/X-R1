@@ -38,6 +38,7 @@ from rewards import (
 )
 from utils.callbacks import get_callbacks
 from utils.prepare_dataset import prepare_dataset, prepare_quick_eval_dataset
+from utils.wandb_logging import init_wandb_training
 from x_grpo_trainer import XGRPOTrainer
 from x_grpo_plus_trainer import XGRPOPlusTrainer
 from x_grpo_supervised_trainer import XGRPOSupervisedTrainer
@@ -46,19 +47,6 @@ from peft import LoraConfig, PeftModel, get_peft_model
 
 
 logger = logging.getLogger(__name__)
-
-
-
-def init_wandb_training(training_args):
-    """
-    Helper function for setting up Weights & Biases logging tools.
-    """
-    if training_args.wandb_entity is not None:
-        os.environ["WANDB_ENTITY"] = training_args.wandb_entity
-    if training_args.wandb_project is not None:
-        os.environ["WANDB_PROJECT"] = training_args.wandb_project
-
-
 
 @dataclass
 class GRPOScriptArguments(ScriptArguments):

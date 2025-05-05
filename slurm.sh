@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=gsc
+#SBATCH --job-name=regexMath
 #SBATCH --mail-user=zzchen2@cse.cuhk.edu.hk
 #SBATCH --mail-type=ALL
 #SBATCH --output=/research/d2/spc/zzchen2/X-R1/tmp/results.txt

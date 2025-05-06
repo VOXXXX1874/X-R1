@@ -18,6 +18,8 @@ from typing import Optional
 
 import trl
 
+from trl import ScriptArguments
+
 
 # TODO: add the shared options with a mixin to reduce code duplication
 @dataclass
@@ -57,6 +59,58 @@ class GRPOConfig(trl.GRPOConfig):
         metadata={"help": "Use regex to match the steps."},
     )
 
+@dataclass
+class GRPOScriptArguments(ScriptArguments):
+    reward_funcs: list[str] = field(
+        default_factory=lambda: ["accuracy", "format"],
+        metadata={
+            "help": "List of reward functions. Possible values: 'accuracy', 'format', 'reasoning_steps', 'cosine', 'repetition_penalty', 'length'"
+        },
+    )
+    cosine_min_value_wrong: float = field(
+        default=0.0,
+        metadata={"help": "Minimum reward for wrong answers"},
+    )
+    cosine_max_value_wrong: float = field(
+        default=-0.5,
+        metadata={"help": "Maximum reward for wrong answers"},
+    )
+    cosine_min_value_correct: float = field(
+        default=0.5,
+        metadata={"help": "Minimum reward for correct answers"},
+    )
+    cosine_max_value_correct: float = field(
+        default=1.0,
+        metadata={"help": "Maximum reward for correct answers"},
+    )
+    cosine_max_len: int = field(
+        default=1000,
+        metadata={"help": "Maximum length for scaling"},
+    )
+    repetition_n_grams: int = field(
+        default=3,
+        metadata={"help": "Number of n-grams for repetition penalty reward"},
+    )
+    repetition_max_penalty: float = field(
+        default=-1.0,
+        metadata={"help": "Maximum (negative) penalty for for repetition penalty reward"},
+    )
+    reference_model: str = field(
+        default=None,
+        metadata={"help": "Reference model for grpo algorithm"},
+    )
+    trainer_type: str = field(
+        default="XGRPOTrainer",
+        metadata={"help": "Type of trainer to use"},
+    )
+    quick_eval_dataset: str = field(
+        default=None,
+        metadata={"help": "Quick evaluation dataset"},
+    )
+    critical_value_reward: bool = field(
+        default=False,
+        metadata={"help": "Use critical value reward"},
+    )
 
 
 @dataclass
@@ -71,6 +125,7 @@ class SFTConfig(trl.SFTConfig):
     callbacks: list[str] = field(
         default_factory=lambda: [], metadata={"help": "The callbacks to run during training."}
     )
+    chat_template: Optional[str] = field(default=None, metadata={"help": "The chat template to use."})
     system_prompt: Optional[str] = field(
         default=None,
         metadata={"help": "The optional system prompt to use for benchmarking."},

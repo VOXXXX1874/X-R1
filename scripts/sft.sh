@@ -14,3 +14,11 @@ accelerate launch --config_file=recipes/accelerate_configs/zero3.yaml src/open_r
     --eval_strategy steps \
     --eval_steps 100 \
     --output_dir data/Qwen2.5-1.5B-Open-R1-Distill
+
+# 2 3090
+ACCELERATE_LOG_LEVEL=info \
+accelerate launch \
+--config_file recipes/zero3.yaml \
+--num_processes=2 src/x_r1/sft.py \
+--config recipes/SFT_0dot5B_experimental_config.yaml \
+> ./output/sft_experimental_sampling.log 2>&1

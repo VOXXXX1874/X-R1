@@ -25,7 +25,7 @@ from transformers.trainer_utils import get_last_checkpoint
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-from configs import GRPOConfig
+from configs import GRPOConfig, GRPOScriptArguments
 from rewards import (
     accuracy_thinking_reward,
     accuracy_reward,
@@ -42,64 +42,11 @@ from utils.wandb_logging import init_wandb_training
 from x_grpo_trainer import XGRPOTrainer
 from x_grpo_plus_trainer import XGRPOPlusTrainer
 from x_grpo_supervised_trainer import XGRPOSupervisedTrainer
-from trl import ModelConfig, ScriptArguments, TrlParser, get_peft_config
+from trl import ModelConfig, TrlParser, get_peft_config
 from peft import LoraConfig, PeftModel, get_peft_model
 
 
 logger = logging.getLogger(__name__)
-
-@dataclass
-class GRPOScriptArguments(ScriptArguments):
-    reward_funcs: list[str] = field(
-        default_factory=lambda: ["accuracy", "format"],
-        metadata={
-            "help": "List of reward functions. Possible values: 'accuracy', 'format', 'reasoning_steps', 'cosine', 'repetition_penalty', 'length'"
-        },
-    )
-    cosine_min_value_wrong: float = field(
-        default=0.0,
-        metadata={"help": "Minimum reward for wrong answers"},
-    )
-    cosine_max_value_wrong: float = field(
-        default=-0.5,
-        metadata={"help": "Maximum reward for wrong answers"},
-    )
-    cosine_min_value_correct: float = field(
-        default=0.5,
-        metadata={"help": "Minimum reward for correct answers"},
-    )
-    cosine_max_value_correct: float = field(
-        default=1.0,
-        metadata={"help": "Maximum reward for correct answers"},
-    )
-    cosine_max_len: int = field(
-        default=1000,
-        metadata={"help": "Maximum length for scaling"},
-    )
-    repetition_n_grams: int = field(
-        default=3,
-        metadata={"help": "Number of n-grams for repetition penalty reward"},
-    )
-    repetition_max_penalty: float = field(
-        default=-1.0,
-        metadata={"help": "Maximum (negative) penalty for for repetition penalty reward"},
-    )
-    reference_model: str = field(
-        default=None,
-        metadata={"help": "Reference model for grpo algorithm"},
-    )
-    trainer_type: str = field(
-        default="XGRPOTrainer",
-        metadata={"help": "Type of trainer to use"},
-    )
-    quick_eval_dataset: str = field(
-        default=None,
-        metadata={"help": "Quick evaluation dataset"},
-    )
-    critical_value_reward: bool = field(
-        default=False,
-        metadata={"help": "Use critical value reward"},
-    )
 
 
 def main(script_args, training_args, model_args):

@@ -1,1 +1,1 @@
-Find the minimum value of $\sqrt{x^2+y^2}$ if $5x+12y=60$.
+What are all values of $p$ such that for every $q>0$, we have $$\frac{3(pq^2+p^2q+3q^2+3pq)}{p+q}>2p^2q?$$ Express your answer in interval notation in decimal form.

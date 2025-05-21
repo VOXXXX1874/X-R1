@@ -220,7 +220,7 @@ def gt_cv_parse_regex(text):
     lines = [line.strip() for line in lines]
     # escape special characters
     lines = [re.escape(line) for line in lines]
-    # replace '=' with '.*' 
+    # replace ' ' with '.*' 
     lines = [line.replace("\\ ", ".*") for line in lines]
     # make the lines all lower case
     lines = [line.lower() for line in lines]

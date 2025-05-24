@@ -22,4 +22,7 @@ else:
 
     print('result of parse_pm', pm_parse_result)
 
+    test = [solution, solution_pm]
+    print('test', test)
+
     print('result of verify', verify(parse_result, pm_parse_result))

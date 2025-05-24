@@ -1,20 +1,42 @@
 from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
 # import torch
-from transformers import AutoTokenizer 
-import re
+from transformers import AutoTokenizer
+from datasets import load_dataset
+import json
 
-#model_name = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+def create_dataset(dataset_name, tokenizer):
+    dataset = load_dataset(dataset_name, split='test')
+
+    def make_conversation(example):
+        return {
+            "prompt": [
+                {"role": "user", "content": example["problem"]},
+            ],
+        }
+
+    dataset = dataset.map(make_conversation)
+
+    def make_latex(example):
+        example["answer"] = '$' + str(example["answer"]) + '$'
+        return example
+
+    dataset = dataset.map(make_latex)
+
+    def format_function(example):
+        example['prompt'] = tokenizer.apply_chat_template(example['prompt'], tokenize = False, add_generation_prompt = True )
+        return example
+    
+    dataset = dataset.map(format_function, batched = False)
+        
+    return dataset
+
 model_name = "records/Qwen2.5-1.5B-MVOT"
-
-# Read question from question.txt
-with open("src/x_r1/test/MVOT/one_quesiton/question.md", "r") as file:
-    question = file.read()
 
 # Create a sampling params object.
 sampling_params = SamplingParams(temperature=0.7,
                                     max_tokens=4096,
-                                    stop="</answer>",
+                                    n = 10
                                     )
 # Create LLM object
 llm = LLM(model=model_name,  # replace your own model
@@ -26,33 +48,27 @@ llm = LLM(model=model_name,  # replace your own model
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-# CoT
-messages = [
-    {"role": "user", "content": question}
-]
+dataset = create_dataset('src/cv_extraction/MATH-500/exp', tokenizer)
 
-print(messages)
-
-prompt = tokenizer.apply_chat_template(messages, tokenize = False, add_generation_prompt = True )
+prompts = []
+for data in dataset:
+    prompts.append(data['prompt'])
 
 # vllm generation
-outputs = llm.generate([prompt]* 500,  # repeat the prompt for 100 times
+outputs = llm.generate( prompts, 
                         sampling_params=sampling_params,
                         )
 
-answer_list = []
+results = []
 
-for output in outputs:
-    # parse <answer>
-    completion = output.outputs[0].text
-    answer = re.search(r"<answer>(.*)", completion, re.DOTALL)
-    if answer:
-        answer = answer.group(1)
-    else:
-        answer = "No answer found"
-    answer_list.append(answer)
+for output, data in zip(outputs, dataset):
+    results.append({
+        "problem": data['problem'],
+        "answer": data['answer'],
+        "solution": data['solution'],
+        "output": [output.outputs[i].text for i in range(len(output.outputs))],
+    })
 
-# Save the answer to voting.txt
-with open("voting.txt", "w") as file:
-    for answer in answer_list:
-        file.write("<answer>" + answer + "</answer>\n")
+# Save the result to voting.json
+with open('voting.json', 'w') as f:
+    json.dump(results, f, indent=4)

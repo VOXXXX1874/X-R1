@@ -1,1 +1,1 @@
-\(2p^2q(p+q) < 3(pq^2 + p^2q + 3q^2 + 3pq)\)
+ Distance formula: $\sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2}$  

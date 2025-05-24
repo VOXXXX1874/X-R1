@@ -34,7 +34,7 @@ generated_ids = model.generate(
     max_new_tokens=16384,
     temperature=0.7,
     do_sample=True,
-    stop_strings=["</answer>"],
+    # stop_strings=["</answer>"],
     tokenizer=tokenizer,
 )
 generated_ids = [

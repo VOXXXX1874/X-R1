@@ -87,7 +87,7 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
         processes.append(data['process']) if 'process' in data else processes.append('')
 
     # Create a sampling params object.
-    sampling_params = SamplingParams(temperature=0.0,
+    sampling_params = SamplingParams(temperature=0.7,
                                      max_tokens=max_output_tokens,
                                      )
     # Create LLM object

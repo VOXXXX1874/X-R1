@@ -1,1 +1,1 @@
-\(\frac{3pq(p + q) + 9q^2(p + q)}{p + q} > 2p^2q\)
+ The distance formula is \(\sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2}\).  

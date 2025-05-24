@@ -7,7 +7,7 @@
 #SBATCH --qos=gpu
 #SBATCH -p gpu_24h
 #SBATCH -c 24
-#SBATCH -w projgpu14
+#SBATCH -w projgpu13
 
 ACCELERATE_LOG_LEVEL=info accelerate launch \
 --config_file recipes/zero3.yaml \

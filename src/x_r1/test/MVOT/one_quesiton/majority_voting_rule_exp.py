@@ -1,31 +1,11 @@
 from math_verify import parse, LatexExtractionConfig, verify
 from sympy import nan, zoo, Eq, oo, Expr, Lt
 from sympy.core.relational import Relational
-import random
-import numpy as np
 from sympy.logic.boolalg import BooleanTrue, BooleanFalse
+import random
 import re
-
-def majority_voting_final(final_results):
-    # parse the final_answer in the final results
-    for i, result in enumerate(final_results):
-        final_results[i] = (result[0], parse(result[1], extraction_mode="first_match", extraction_config=[LatexExtractionConfig()], fallback_mode = 'no_fallback'))
-    # Remove the empty parsed answers []
-    final_results = [(result[0], result[1][0]) for result in final_results if result[1] != []] 
-    # maintain a majority voting score for each final result
-    scores = []
-    # Calculate the score for each final result
-    # FIXME: A better algorithm is needed
-    for i, result in enumerate(final_results):
-        score = 0
-        for j, other_result in enumerate(final_results):
-            if i != j:
-                # compare the two results
-                if verify(result[1], other_result[1]):
-                    score += 1
-        scores.append(score)
-    # find the index of the result with the highest score
-    return np.argmax(scores)
+import numpy as np
+import time
 
 def expression_classification(expression):
     # perform classification on the variables in the expression
@@ -47,36 +27,19 @@ def expression_classification(expression):
 
 def majority_voting_expression(expression, num_evaluation):
     expression_dict, no_free_symbols_list = expression_classification(expression)
-    
-    voted_expression = []
 
+    voted_expression = []
     # For expressions without free symbols, we can directly use the evaluated values
     # to determine the agreement score
     if len(no_free_symbols_list) > 0:
-        value_to_expr_tuples = {} # Map evaluated value to list of (original_expr_tuple)
-        
-        for expr_item_tuple in no_free_symbols_list: # expr_item_tuple is (id, sympy_obj)
-            # The sympy_obj is a constant or a number since it has no free symbols.
-            # It's assumed to be in its evaluated/canonical form from parsing.
-            val = expr_item_tuple[1] 
-            
-            # Group by this value. SymPy objects are hashable.
-            if val not in value_to_expr_tuples:
-                value_to_expr_tuples[val] = []
-            value_to_expr_tuples[val].append(expr_item_tuple)
-            
-        # For each group of identical values, calculate the score.
-        for val, group_of_expr_tuples in value_to_expr_tuples.items():
-            # The score is the number of identical expressions multiplied by num_evaluation,
-            # to be comparable with scores from expressions with free symbols.
-            # Each of these identical expressions "agrees" with all others in the group.
-            score = len(group_of_expr_tuples) * num_evaluation
-            
-            # Pick the first expression tuple from the group as representative,
-            # as all expressions in this group are identical.
-            representative_expr_tuple = group_of_expr_tuples[0] 
-            voted_expression.append((representative_expr_tuple, score))
-
+        agreement_scores = np.zeros(len(no_free_symbols_list))
+        for i_idx in range(len(no_free_symbols_list)):
+            for j_idx in range(len(no_free_symbols_list)):
+                # call the verify function to get the agreement score
+                if verify(no_free_symbols_list[i_idx][1], no_free_symbols_list[j_idx][1]):
+                    agreement_scores[i_idx] += num_evaluation
+        max_score_idx = np.argmax(agreement_scores)
+        voted_expression.append((no_free_symbols_list[max_score_idx], agreement_scores[max_score_idx]))
     
     # For expressions with free symbols, we perform majority voting by assigning random values
     for symbols_key, expr_list in expression_dict.items():
@@ -155,9 +118,21 @@ def majority_voting_expression(expression, num_evaluation):
     return final_voted_expr
 
 def majority_voting_relational(expression, num_evaluation): # 'expression' here is a list of relational objects
-    expression_dict = expression_classification(expression)
-    
+    expression_dict, no_free_symbols_list = expression_classification(expression)
     voted_results = [] # Stores (relational_object, score)
+    
+    # For expressions without free symbols, we can directly use the evaluated values
+    # to determine the agreement score
+    if len(no_free_symbols_list) > 0:
+        agreement_scores = np.zeros(len(no_free_symbols_list))
+        for i_idx in range(len(no_free_symbols_list)):
+            for j_idx in range(len(no_free_symbols_list)):
+                # call the verify function to get the agreement score
+                if no_free_symbols_list[i_idx][1].doit() == no_free_symbols_list[j_idx][1].doit():
+                    agreement_scores[i_idx] += num_evaluation
+        max_score_idx = np.argmax(agreement_scores)
+        voted_results.append((no_free_symbols_list[max_score_idx], agreement_scores[max_score_idx]))
+    
     for symbols_key, expr_list in expression_dict.items():
         num_relationals_in_group = len(expr_list)
 
@@ -224,77 +199,85 @@ def majority_voting_relational(expression, num_evaluation): # 'expression' here 
     return final_voted_relational
 
 def majority_voting_equation(expression, num_evaluation):
-    # Convert the expression list from equation to relational by subsituting '=' with '<'
+    filtered_expression = []
+    evaluatable_expression = []
+    # Filter out the equations that are not evaluatable
     for i in range(len(expression)):
-        expression[i] = (expression[i][0], Lt(expression[i][1].lhs, expression[i][1].rhs))
+        if len(expression[i][1].free_symbols) != 0:
+            # If the equation has free symbols, convert it from equation to relational by subsituting '=' with '<'
+            filtered_expression.append((expression[i][0], Lt(expression[i][1].lhs, expression[i][1].rhs)))
+        elif len(expression[i][1].free_symbols) == 0:
+            # If the equation has no free symbols, we can directly evaluate it
+            evaluatable_expression.append((expression[i][0], expression[i][1].doit()))
     # Call the majority voting relational function
-    voted_relational = majority_voting_relational(expression, num_evaluation)
+    voted_relational = majority_voting_relational(filtered_expression, num_evaluation)
+    # If there are evaluatable expressions, we can directly use them for majority voting
+    if len(evaluatable_expression) > 0:
+        agreement_scores = np.zeros(len(evaluatable_expression))
+        for i_idx in range(len(evaluatable_expression)):
+            for j_idx in range(len(evaluatable_expression)):
+                # call the verify function to get the agreement score
+                if evaluatable_expression[i_idx][1] == evaluatable_expression[j_idx][1]:
+                    agreement_scores[i_idx] += num_evaluation
+        max_score_idx = np.argmax(agreement_scores)
+        if voted_relational[1] < agreement_scores[max_score_idx]:
+            voted_relational = (evaluatable_expression[max_score_idx], agreement_scores[max_score_idx])
     # Convert the voted relational back to equation
     if voted_relational[0] is not None:
-        voted_equation = ((voted_relational[0][0], Eq(voted_relational[0][1].lhs, voted_relational[0][1].rhs)), voted_relational[1])
+        voted_equation = ((voted_relational[0][0], voted_relational[0][1]), voted_relational[1])
     else:
         voted_equation = (None, -1)
     return voted_equation
 
-def intermediate_majority_voting(intermediate_results, num_evaluation = 128):
-    # First perform majority voting on the <answer> and <final> tags
-    # if the <final> tag is more than 1/2 of the total number of results, then we decide the final answer
-    # print("intermediate_results", intermediate_results)
-    final_results = []
-    middle_results = []
-    answer_pattern = r"<answer>(.*)"
-    final_pattern = r"<final>(.*)"
-    for i, result in enumerate(intermediate_results):
-        if result.find("<final>") != -1:
-            # remove the <final> tag
-            result = re.search(final_pattern, result).group(1)
-            final_results.append((i, result))
-        elif result.find("<answer>") != -1:
-            # remove the <answer> tag
-            result = re.search(answer_pattern, result).group(1)
-            middle_results.append((i, result))
-        
-    if len(final_results) > len(intermediate_results) / 2:
-        final_result_index = final_results[majority_voting_final(final_results)][0]
-        return final_result_index
-    elif len(middle_results) > len(intermediate_results) / 2:
-        # if the <answer> tag is more than 1/2 of the total number of results, then we decide the intermediate answer
-        # parse the answer in the middle results
-        print("middle_results", middle_results)
-        for i, result in enumerate(middle_results):
-            middle_results[i] = (result[0], parse(result[1], extraction_mode="first_match", extraction_config=[LatexExtractionConfig()], fallback_mode = 'no_fallback'))
-        # Remove the empty parsed answers []
-        parsed_answers = [(result[0], result[1][0]) for result in middle_results if result[1] != []]
-        print("parsed_answers", parsed_answers)
-        # classify the sympy answers into expression, relational, and equation
-        expression = []
-        relational = []
-        equation = []
-        for parsed_answer in parsed_answers:
-            if isinstance(parsed_answer[1], Eq):
-                equation.append(parsed_answer)
-            elif isinstance(parsed_answer[1], Relational):
-                relational.append(parsed_answer)
-            elif isinstance(parsed_answer[1], Expr):
-                expression.append(parsed_answer)
-            else:
-                # FIXME: How to deal with set?
-                pass
-        
-        voted_expression = majority_voting_expression(expression, num_evaluation)
+# This script is used to test the majority voting algorithm on the file voting.txt
+start_time = time.time()
 
-        voted_relational = majority_voting_relational(relational, num_evaluation)
+# load the file voting.txt
+with open("src/x_r1/test/MVOT/one_quesiton/voting.txt", "r") as file:
+    voting = file.read()
 
-        voted_equation = majority_voting_equation(equation, num_evaluation)
+# parse the voting with "<answer>(.*)</answer>"
+pattern = r"<answer>(.*?)</answer>"
+matches = re.findall(pattern, voting, re.DOTALL)
+# Collect all the parsed answers
+parsed_answers = []
+for i, match in enumerate(matches):
+    # Remove any leading or trailing whitespace
+    cleaned_match = match.strip()
+    # Append the cleaned match to the list
+    parsed_answers.append((i,parse(cleaned_match, extraction_mode="first_match", extraction_config=[LatexExtractionConfig()], fallback_mode = 'no_fallback')))
 
-        if voted_expression[1]==-1 and voted_relational[1]==-1 and voted_equation[1]==-1:
-            # If all the voted results are -1, then we return a random result
-            return random.choice(middle_results)[0]
+print("time taken to read and parse the answers:", time.time() - start_time)
+start_time = time.time()
 
-        # chose the one with the highest score
-        if voted_expression[1] >= voted_relational[1] and voted_expression[1] >= voted_equation[1]:
-            return voted_expression[0][0]
-        elif voted_relational[1] >= voted_expression[1] and voted_relational[1] >= voted_equation[1]:
-            return voted_relational[0][0]
-        elif voted_equation[1] >= voted_expression[1] and voted_equation[1] >= voted_relational[1]:
-            return voted_equation[0][0]
+# Remove the empty parsed answers []
+parsed_answers = [(answer[0], answer[1][0]) for answer in parsed_answers if answer[1] != []] 
+
+# classify the sympy answers into expression, relational, and equation
+expression = []
+relational = []
+equation = []
+for parsed_answer in parsed_answers:
+    if isinstance(parsed_answer[1], Eq):
+        equation.append(parsed_answer)
+    elif isinstance(parsed_answer[1], Relational):
+        relational.append(parsed_answer)
+    elif isinstance(parsed_answer[1], Expr):
+        expression.append(parsed_answer)
+    else:
+        # FIXME: How to deal with set?
+        pass
+
+voted_expression = majority_voting_expression(expression, 128)
+print('voted_expression', voted_expression)
+print('time taken to vote the expression:', time.time() - start_time)
+start_time = time.time()
+
+voted_relational = majority_voting_relational(relational, 128)
+print('voted_relational', voted_relational)
+print('time taken to vote the relational:', time.time() - start_time)
+start_time = time.time()
+
+voted_equation = majority_voting_equation(equation, 128)
+print('voted_equation', voted_equation)
+print('time taken to vote the equation:', time.time() - start_time)

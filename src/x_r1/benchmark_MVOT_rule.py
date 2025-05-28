@@ -2,7 +2,7 @@ from datasets import load_dataset
 from vllm import LLM, SamplingParams
 import argparse
 import json
-from utils.majority_voting import intermediate_majority_voting
+from x_r1.utils.majority_voting_rule import intermediate_majority_voting
 from rewards import eval_answer_reward_MVOT
 # import torch
 import re
@@ -50,11 +50,14 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
     answers = []
     prompts = []
     processes = []
+    count = 0
     for data in dataset:
         answers.append(data['answer'])
         prompts.append(data['prompt'])
         processes.append(data['process']) if 'process' in data else processes.append('')
-        #break
+        count += 1
+        if count == 200:
+            break
 
     # Create a sampling params object.
     sampling_params = SamplingParams(temperature=0.7,
@@ -77,12 +80,12 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
     total_format = 0
     for prompt, gold_answer, gold_process in zip (prompts, answers, processes):
         selected_context = prompt
+        print('selected context: ', selected_context)
         for _ in range(args.max_steps):
             # If there is <final> tag in the context, we stop the generation
-            if selected_context[-1]["content"].find("</final>") != -1:
+            if selected_context[-1]["content"].find("<final>") != -1:
                 break
             # Tokenize the selected context
-            print('selected context: ', selected_context)
             input_ids = tokenizer.apply_chat_template(selected_context, tokenize = False, add_generation_prompt = True )
             # vllm generation
             outputs = llm.generate([input_ids] * args.num_generation,
@@ -93,10 +96,15 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
             for output in outputs:
                 completion = output.outputs[0].text
                 # search for the <answer> tag
-                answer = re.search(r"</think>(.*)", completion, re.DOTALL)
+                answer = re.search(r"<answer>(.*)", completion, re.DOTALL)
                 if answer:
                     # Append the answer to the list
-                    intermediate_results.append(answer.group(1))
+                    intermediate_results.append("<answer>" + answer.group(1))
+                else:
+                    answer = re.search(r"<final>(.*)", completion, re.DOTALL)
+                    if answer:
+                        # Append the answer to the list
+                        intermediate_results.append("<final>" + answer.group(1))
 
             if len(intermediate_results) == 0:
                 break
@@ -106,6 +114,7 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
                 selected_context.append({"role": "assistant", "content": outputs[intermediate_majority_voting(intermediate_results)].outputs[0].text + "</answer>"})
             elif selected_context[-1]['role'] == 'assistant':
                 selected_context[-1]["content"] += outputs[intermediate_majority_voting(intermediate_results)].outputs[0].text + "</answer>"
+            print('selected context: ', selected_context)
 
         completion = selected_context[-1]["content"]
         # if the max_step = 0
@@ -117,8 +126,9 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
                                             ),
                                         use_tqdm=False,)
             completion = final_output[0].outputs[0].text
+            print('final output: ', final_output[0].outputs[0].text)
         # if the final answer is not in the context, inference the final answer
-        elif selected_context[-1]["content"].find("</final>") == -1:
+        elif selected_context[-1]["content"].find("<final>") == -1:
             input_ids = tokenizer.apply_chat_template(selected_context, tokenize = False, add_generation_prompt = True )
             final_output = llm.generate([input_ids],
                                         SamplingParams(temperature=0.7,
@@ -126,6 +136,9 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
                                             ),
                                         use_tqdm=False,)
             completion += final_output[0].outputs[0].text
+            print('final output: ', final_output[0].outputs[0].text)
+        if selected_context[-1]["content"][-8:] == "</answer>":
+            selected_context[-1]["content"] = selected_context[-1]["content"][:-8]
         
         if args.reward_function == 'eval_answer_reward':
             acc_score, _ = eval_answer_reward_MVOT(completion, gold_answer, silence = False)

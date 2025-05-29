@@ -136,12 +136,6 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
         #count += 1
         #if count == 50:
         #    break
-
-    # Create a sampling params object.
-    sampling_params = SamplingParams(temperature=0.7,
-                                     max_tokens=max_output_tokens,
-                                     stop=["</answer>", "</final>"],
-                                     )
     # Create LLM object
     llm = LLM(model=model_name,  # replace your own model
                 dtype='bfloat16',
@@ -165,6 +159,11 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
     total_format = 0
     for prompt, gold_answer, gold_process in zip (prompts, answers, processes):
         selected_context = prompt
+        # Create a sampling params for regular steps
+        sampling_params = SamplingParams(temperature=0.7,
+                                    max_tokens=max_output_tokens,
+                                    stop=["</answer>", "</final>"],
+                                    )
         print('selected context: ', selected_context)
         for i in range(args.max_steps + 1):
             # If there is <final> tag in the context, we stop the generation
@@ -172,6 +171,7 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
                 break
             # Tokenize the selected context
             if i == args.max_steps:
+                # if it is the last step, we do not stop at </answer> tag
                 sampling_params = SamplingParams(temperature=0.7,
                                      max_tokens=max_output_tokens,
                                      )

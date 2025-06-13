@@ -47,7 +47,7 @@ def mean_simcount_cosine_similarity(hidden_states):
     # Calculate the cosine similarity between the hidden states
     cosine_similarities = mean_hidden_states @ mean_hidden_states.T
     # Sum the cosine similarities for each intermediate result
-    summed_similarities = (cosine_similarities > 0.8).sum(dim=1)
+    summed_similarities = (cosine_similarities > 0.975).sum(dim=1)
     # Find the index of the maximum similarity
     max_index = summed_similarities.argmax().item()
     # Return the index of the intermediate result with the maximum similarity
@@ -92,7 +92,7 @@ def intermediate_majority_voting(model, tokenizer, selected_context, intermediat
             # Find the character position of <answer> or <final> tag
             char_pos_list = []
             for j, offsets in enumerate(offsets_list):
-                char_pos = full_context_list[i + j].find("<final>")
+                char_pos = full_context_list[i + j].rfind("<final>")
                 if char_pos == -1:
                     char_pos = full_context_list[i + j].rfind("<answer>")
                 print("context after <final> or <answer> tag: ", full_context_list[i + j][char_pos:])
@@ -113,7 +113,7 @@ def intermediate_majority_voting(model, tokenizer, selected_context, intermediat
     # Perform majority voting on the hidden states
     # TODO: A better way to do majority voting
     # Here we use the mean of the hidden states as the representative
-    return mean_naive_cosine_similarity(all_hidden_states)
+    return mean_simcount_cosine_similarity(all_hidden_states)
 
 
 def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_tokens):
@@ -134,7 +134,7 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
         prompts.append(data['prompt'])
         processes.append(data['process']) if 'process' in data else processes.append('')
         #count += 1
-        #if count == 50:
+        #if count == 10:
         #    break
     # Create LLM object
     llm = LLM(model=model_name,  # replace your own model
@@ -160,7 +160,7 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
     for prompt, gold_answer, gold_process in zip (prompts, answers, processes):
         selected_context = prompt
         # Create a sampling params for regular steps
-        sampling_params = SamplingParams(temperature=0.7,
+        sampling_params = SamplingParams(temperature=args.temperature,
                                     max_tokens=max_output_tokens,
                                     stop=["</answer>", "</final>"],
                                     )
@@ -173,13 +173,9 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
             if i == args.max_steps:
                 # if it is the last step, we do not stop at </answer> tag
                 sampling_params = SamplingParams(temperature=0.7,
-                                     max_tokens=max_output_tokens,
+                                     max_tokens=max_output_tokens * 4,
                                      )
-                if args.max_steps < 1:
-                    input_ids = tokenizer.apply_chat_template(selected_context, tokenize = False, add_generation_prompt = True )
-                else:
-                    input_ids = tokenizer.apply_chat_template(selected_context, tokenize = False, continue_final_message = True )
-            elif i == 0:
+            if i == 0:
                 input_ids = tokenizer.apply_chat_template(selected_context, tokenize = False, add_generation_prompt = True )
             else:
                 input_ids = tokenizer.apply_chat_template(selected_context, tokenize = False, continue_final_message = True )
@@ -201,9 +197,9 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
             # Perform majority voting on the intermediate results
             # <final> is also part of majority voting
             if selected_context[-1]['role'] == 'user':
-                selected_context.append({"role": "assistant", "content": intermediate_results[intermediate_majority_voting(model, tokenizer, selected_context, intermediate_results, -1)]})
+                selected_context.append({"role": "assistant", "content": intermediate_results[intermediate_majority_voting(model, tokenizer, selected_context, intermediate_results, args.layer)]})
             elif selected_context[-1]['role'] == 'assistant':
-                selected_context[-1]["content"] += intermediate_results[intermediate_majority_voting(model, tokenizer, selected_context, intermediate_results, -1)]
+                selected_context[-1]["content"] += intermediate_results[intermediate_majority_voting(model, tokenizer, selected_context, intermediate_results, args.layer)]
             print('selected context: ', selected_context)
 
         completion = selected_context[-1]["content"]
@@ -261,6 +257,10 @@ if __name__ == "__main__":
                         help='number of trials generated for each step')
     parser.add_argument('--max_steps', type=int, default=6,
                         help='maximum number of steps for each problem')
+    parser.add_argument('--layer', type=int, default=-1,
+                        help='hidden state from which layer to extract, -1 means the last layer')
+    parser.add_argument('--temperature', type=float, default=0.7,
+                        help='temperature for sampling')
     args = parser.parse_args()
     print(args)
 

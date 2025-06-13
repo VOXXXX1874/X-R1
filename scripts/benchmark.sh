@@ -95,3 +95,14 @@ CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark_MVOT_latent.py \
 	--num_generation=32 \
 	--max_steps=8 \
 	--num_gpus=1 > output/benchmark_sampling.log 2>&1
+
+CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark_MVOT_latent.py \
+	--model_name='./records/Qwen2.5-1.5B-MVOT' \
+    --dataset_name='src/cv_extraction/MATH-500/exp' \
+	--output_name='./output/result_benchmark_math500'  \
+	--max_output_tokens=1024 \
+	--num_generation=32 \
+	--max_steps=8 \
+	--num_gpus=1 \
+	--layer=-2 \
+	--temperature=1.0 > output/benchmark_sampling.log 2>&1

@@ -144,3 +144,7 @@ class SFTConfig(trl.SFTConfig):
         default=None,
         metadata={"help": ("The project to store runs under.")},
     )
+    trainer_type: str = field(
+        default="SFTTrainer",
+        metadata={"help": "Type of trainer to use"},
+    )

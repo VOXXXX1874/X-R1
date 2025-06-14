@@ -35,10 +35,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenize
 from trl import ModelConfig, get_kbit_device_map, get_quantization_config
 from configs import GRPOConfig, SFTConfig
 
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizer
-from trl import ModelConfig, get_kbit_device_map, get_quantization_config
-from configs import GRPOConfig, SFTConfig
+from trainer.pencil_sft_trainer import PencilSFTTrainer
 
 logger = logging.getLogger(__name__)
 
@@ -134,15 +131,30 @@ def main(script_args, training_args, model_args):
     ############################
     # Initialize the SFT Trainer
     ############################
-    trainer = SFTTrainer(
-        model=model,
-        args=training_args,
-        train_dataset=dataset[script_args.dataset_train_split],
-        eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
-        processing_class=tokenizer,
-        peft_config=get_peft_config(model_args),
-        callbacks=get_callbacks(training_args, model_args),
-    )
+    if training_args.trainer_type == "SFTTrainer":
+        print("Using SFTTrainer")
+        trainer = SFTTrainer(
+            model=model,
+            args=training_args,
+            train_dataset=dataset[script_args.dataset_train_split],
+            eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
+            processing_class=tokenizer,
+            peft_config=get_peft_config(model_args),
+            callbacks=get_callbacks(training_args, model_args),
+        )
+    elif training_args.trainer_type == "PencilSFTTrainer":
+        print("Using PencilSFTTrainer")
+        trainer = PencilSFTTrainer(
+            model=model,
+            args=training_args,
+            train_dataset=dataset[script_args.dataset_train_split],
+            eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
+            processing_class=tokenizer,
+            peft_config=get_peft_config(model_args),
+            callbacks=get_callbacks(training_args, model_args),
+        )
+    else:
+        raise ValueError(f"Unknown trainer type: {training_args.trainer_type}")
 
     ###############
     # Training loop

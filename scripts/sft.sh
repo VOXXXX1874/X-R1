@@ -29,3 +29,10 @@ accelerate launch \
 --num_processes=2 src/x_r1/sft.py \
 --config recipes/SFT_1dot5B_config.yaml \
 > ./output/sft_1dot5B_sampling.log 2>&1
+
+ACCELERATE_LOG_LEVEL=info \
+accelerate launch \
+--config_file recipes/zero3.yaml \
+--num_processes=3 src/x_r1/sft.py \
+--config recipes/Pencil_1dot5B_config.yaml \
+> ./output/pencil_1dot5B_sampling.log 2>&1

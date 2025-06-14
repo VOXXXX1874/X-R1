@@ -5,10 +5,12 @@ torch_dtype: bfloat16
 attn_implementation: flash_attention_2
 
 # Data training arguments
-dataset_name: src/x_r1/test/MVOT/exp_sft/dataset
-num_processes: 2
+dataset_name: src/x_r1/test/MVOT/exp_sft/dataset_xr1
+num_processes: 3
+remove_unused_columns: false
 
 # SFT trainer config
+trainer_type: "PencilSFTTrainer"
 bf16: true
 do_eval: false
 eval_strategy: 'no'
@@ -27,7 +29,7 @@ packing: false
 max_length: 4096
 max_steps: -1
 num_train_epochs: 1
-output_dir: output/Qwen2.5-1.5B-MVOT
+output_dir: output/Qwen2.5-1.5B-pencil
 overwrite_output_dir: true
 per_device_eval_batch_size: 1
 per_device_train_batch_size: 8
@@ -38,8 +40,6 @@ save_strategy: "steps"
 save_steps: 100
 save_total_limit: 1
 seed: 42
-use_liger: true
-use_liger_kernel: true
 warmup_ratio: 0.05
 
 #lora_r: 32

@@ -5,7 +5,7 @@ from openai import AsyncOpenAI
 import asyncio
 
 # Read the json file train.json
-with open("test.json", "r") as f:
+with open("deepscaler.json", "r") as f:
     math_qa_dataset = json.load(f)
 
 
@@ -25,16 +25,18 @@ prompt_MVOT_generation = (
     "### Formatted Solution:\n"
     "Step 1:\n"
     "<think> First we'll simplify that complicated expression. We attempt to factor the numerator of the left side: \\begin{align*} pq^2+p^2q+3q^2+3pq &= q(pq + p^2 + 3q + 3p) \\\\ &= q[ p(q+p) + 3(q+p) ] \\\\ &= q(p+3)(q+p). \\end{align*} </think>\n"
-    "<answer> Numerator of the left side: $pq^2+p^2q+3q^2+3pq = q(p+3)(q+p)$ </answer>\n"
+    "<record> Numerator of the left side: $pq^2+p^2q+3q^2+3pq = q(p+3)(q+p)$ </record>\n"
     "Step 2:\n"
     "<think> Substituting this in for the numerator in our inequality gives $$\\frac{3q(p+3)(p+q)}{p+q}>2p^2q.$$We note that left hand side has $p+q$ in both the numerator and denominator. We can only cancel these terms if $p+q \\neq 0.$ Since we're looking for values of $p$ such that the inequality is true for all $q > 0,$ we need $p \\geq 0$ so that $p + q \\neq 0.$\n"
-    "<answer> We can derive $p \\geq 0$ </answer>\n"
+    "<record> We can derive $p \\geq 0$ </record>\n"
     "Step 3:\n"
     "<think> Also because this must be true for every $q>0$, we can cancel the $q$'s on both sides. This gives \\begin{align*} 3(p+3)&>2p^2\\Rightarrow\\\\ 3p+9&>2p^2 \\Rightarrow\\\\ 0&>2p^2-3p-9. \\end{align*} </think>\n"
-    "<answer> The inequality can be simplified to $2p^2-3p-9<0$ </answer>\n"
+    "<record> The inequality can be simplified to $2p^2-3p-9<0$ </record>\n"
     "Step 4:\n"
     "<think> Now we must solve this quadratic inequality. We can factor the quadratic as $2p^2-3p-9=(2p+3)(p-3)$. The roots are $p=3$ and $p=-1.5$. Since a graph of this parabola would open upwards, we know that the value of $2p^2 - 3p - 9$ is negative between the roots, so the solution to our inequality is $-1.5<p<3.$ But we still need $0 \\leq p,$ so in interval notation the answer is $\\boxed{[0,3)}$.</think>\n"
-    "<final> $\\boxed{[0,3)}$ </final>\n"
+    "<record> All value of $p$ such that the inequality is true is $[0,3)$ </record>\n"
+    "### Final Answer:\n"
+    "<answer> $\\boxed{[0,3)}$ </answer>\n"
     "\n"
     "You can format the solution in arbitrary steps depending on the complexity. The math problem you are given is:\n"
     "### Problem:\n"

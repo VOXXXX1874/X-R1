@@ -4,12 +4,12 @@ from transformers import AutoTokenizer
 import random
 
 # Read the "result.json" file
-with open("result.json", "r") as f:
+with open("records/dataset3_DS.json", "r") as f:
     qa_dataset = json.load(f)
 
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-1.5B-Instruct")
 
-system_prompt = ("Aconversation between User and Assistant. The user asks a question, and the Assistant solves it."
+system_prompt = ("A conversation between User and Assistant. The user asks a question, and the Assistant solves it."
     "The assistant first thinks about the reasoning process in the mind and then records the intermediate results."
     "The recorded intermediate results should be enough for the reasoning process in the later steps."
     "The reasoning process, record, and final answer are enclosed within"
@@ -66,14 +66,12 @@ for i, qa in enumerate(qa_dataset):
                 # Tokenize the text and get offset mapping
                 inputs = tokenizer(text, return_tensors="pt", padding=True, return_offsets_mapping=True)
                 offsets = inputs.pop("offset_mapping")[0]
-                # Find the first "<record>" tag in the text
-                first_record_start = text.find("<|im_start|>assistant\n") + text[text.find("<|im_start|>assistant\n"):].find("<record>") - 1
                 # Find the second last "</record>" tag in the text
                 second_last_record_end = text[:text.rfind("</record>")].rfind("</record>") + len("</record>") + 1
                 # if the tokens is in the range of the first "<record>" and second last "</record>", set the labels to 0, otherwise 1
                 objective_mask = []
                 for token_idx, (start, end) in enumerate(offsets):
-                    if start >= first_record_start and end <= second_last_record_end:
+                    if end <= second_last_record_end:
                         objective_mask.append(0)
                     else:
                         objective_mask.append(1)

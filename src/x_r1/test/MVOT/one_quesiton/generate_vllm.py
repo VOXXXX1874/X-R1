@@ -5,12 +5,19 @@ from transformers import AutoTokenizer
 from datasets import load_dataset
 import json
 
+system_prompt = ("Aconversation between User and Assistant. The user asks a question, and the Assistant solves it."
+    "The assistant first thinks about the reasoning process in the mind and then records the intermediate results."
+    "The recorded intermediate results should be enough for the reasoning process in the later steps."
+    "The reasoning process, record, and final answer are enclosed within"
+    "<think> </think>, <record> </record>, and <answer> </answer> tags, respectively.")
+
 def create_dataset(dataset_name, tokenizer):
     dataset = load_dataset(dataset_name, split='test')
 
     def make_conversation(example):
         return {
             "prompt": [
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": example["problem"]},
             ],
         }
@@ -31,7 +38,7 @@ def create_dataset(dataset_name, tokenizer):
         
     return dataset
 
-model_name = "records/Qwen2.5-1.5B-MVOT"
+model_name = "records/Qwen2.5-1.5B-pencil-xr1"
 
 # Create a sampling params object.
 sampling_params = SamplingParams(temperature=0.7,
@@ -51,8 +58,12 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 dataset = create_dataset('src/cv_extraction/MATH-500/exp', tokenizer)
 
 prompts = []
+count = 0
 for data in dataset:
     prompts.append(data['prompt'])
+    count += 1
+    if count == 50:
+        break
 
 # vllm generation
 outputs = llm.generate( prompts, 

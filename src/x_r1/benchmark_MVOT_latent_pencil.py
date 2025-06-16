@@ -7,6 +7,13 @@ from rewards import eval_answer_reward
 import re
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
+import copy
+
+system_prompt = ("A conversation between User and Assistant. The user asks a question, and the Assistant solves it."
+    "The assistant first thinks about the reasoning process in the mind and then records the intermediate results."
+    "The recorded intermediate results should be enough for the reasoning process in the later steps."
+    "The reasoning process, record, and final answer are enclosed within"
+    "<think> </think>, <record> </record>, and <answer> </answer> tags, respectively.")
 
 def eval_thinking_reward(completion, gold_answer, gold_process, silence = False):
     raise NotImplementedError('eval_thinking_reward is not implemented yet')
@@ -17,6 +24,7 @@ def create_dataset(dataset_name, tokenizer):
     def make_conversation(example):
         return {
             "prompt": [
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": example["problem"]},
             ],
         }
@@ -96,6 +104,7 @@ def intermediate_majority_voting(model, tokenizer, selected_context, intermediat
                 if char_pos == -1:
                     char_pos = full_context_list[i + j].rfind("<record>")
                 print("context after <answer> or <record> tag: ", full_context_list[i + j][char_pos:])
+                #print("Full context: ", full_context_list[i + j])
                 for token_idx, (start, end) in enumerate(offsets):
                     # Find the first token that *ends* after the target character position.
                     if end > char_pos:
@@ -132,14 +141,14 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
         answers.append(data['answer'])
         prompts.append(data['prompt'])
         processes.append(data['process']) if 'process' in data else processes.append('')
-        #count += 1
-        #if count == 10:
-        #    break
+        count += 1
+        if count == args.num_samples:
+            break
     # Create LLM object
     llm = LLM(model=model_name,  # replace your own model
                 dtype='bfloat16',
                 tensor_parallel_size=num_gpus,  # number of gpu
-                gpu_memory_utilization=0.9,  # prevent OOM
+                gpu_memory_utilization=0.7,  # prevent OOM
                 trust_remote_code=True,
                 # use_cache=False,
               )
@@ -153,6 +162,7 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
 
     sampling_params = SamplingParams(temperature=args.temperature,
                             max_tokens=max_output_tokens,
+                            stop=["</answer>", "</record>"],
                             )
 
     pro_scores = []
@@ -168,6 +178,8 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
             # If there is <answer> tag in the context, we stop the generation
             if selected_context[-1]["content"].find("<answer>") != -1:
                 break
+            elif selected_context[-1]['role'] == 'assistant':
+                selected_context[-1]['content'] = selected_context[-1]['content'] + "</record>"
             # Tokenize the selected context
             if i == 0:
                 input_ids = tokenizer.apply_chat_template(selected_context, tokenize = False, add_generation_prompt = True )
@@ -180,15 +192,17 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
             if i == args.max_steps:
                 intermediate_results = []
                 # convert selected context to rollout
+                rollout = [copy.deepcopy(selected_context) for _ in range(args.num_generation)]
                 if selected_context[-1]['role'] == 'user':
-                    rollout = [selected_context.append({"role": "assistant", "content": output.outputs[0].text}) for output in outputs]
+                    for j, output in enumerate(outputs):
+                        rollout[j].append({"role": "assistant", "content": output.outputs[0].text})
                 elif selected_context[-1]['role'] == 'assistant':
-                    rollout = [selected_context] * args.num_generation
                     for j, output in enumerate(outputs):
                         rollout[j][-1]["content"] += output.outputs[0].text
-                selected_context = selected_context[:-1]  # remove the last message, which is the model output
+                selected_context = selected_context[0:2]  # remove the last message, which is the model output
                 # go to final answer
                 for j in range(0, 20):
+                    #print("continue rollout")
                     # if any of the rollouts contains <answer> tag, we add the rollout to intermediate results and remove it from rollout list
                     remove_indices = []
                     for k, r in enumerate(rollout):
@@ -196,8 +210,10 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
                             intermediate_results.append(r[-1]["content"])
                             remove_indices.append(k)
                         else:
-                            # erase the thinking in the rollout
+                            # erase the thinking in the rollout and add </record> tag
+                            #print('rollout ', k, ' content: ', r[-1]["content"])
                             rollout[k][-1]["content"] = re.sub(r'<think>.*?</think>', '', rollout[k][-1]["content"], flags=re.DOTALL)
+                            rollout[k][-1]["content"] = rollout[k][-1]["content"].replace("\n\n", "") + "</record>"
                     # remove the rollouts that contain <answer> tag
                     for k in sorted(remove_indices, reverse=True):
                         del rollout[k]
@@ -225,12 +241,12 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
             # erase the thinking in selected intermediate result
             selected_intermediate_result = re.sub(r'<think>.*?</think>', '', intermediate_results[intermediate_majority_voting(model, tokenizer, selected_context, intermediate_results, args.layer)], flags=re.DOTALL)
             if selected_context[-1]['role'] == 'user':
-                selected_context.append({"role": "assistant", "content": selected_intermediate_result})
+                selected_context.append({"role": "assistant", "content": selected_intermediate_result.replace("\n\n", "")})
             elif selected_context[-1]['role'] == 'assistant':
-                selected_context[-1]["content"] += selected_intermediate_result
+                selected_context[-1]["content"] += selected_intermediate_result.replace("\n\n", "")
             print('selected context: ', selected_context)
         
-        completion = selected_context[-1]["content"]
+        completion = selected_context[-1]["content"] + "</answer>"
         
         if args.reward_function == 'eval_answer_reward':
             acc_score, _ = eval_answer_reward(completion, gold_answer, silence = False)
@@ -289,6 +305,8 @@ if __name__ == "__main__":
                         help='hidden state from which layer to extract, -1 means the last layer')
     parser.add_argument('--temperature', type=float, default=0.7,
                         help='temperature for sampling')
+    parser.add_argument('--num_samples', type=int, default=99999999,
+                        help='number of samples to evaluate')
     args = parser.parse_args()
     print(args)
 

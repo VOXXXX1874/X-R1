@@ -1,1 +1,1 @@
- Distance formula: $\sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2}$  
+8 <sep> 90 <sep> 5 <sep> 6

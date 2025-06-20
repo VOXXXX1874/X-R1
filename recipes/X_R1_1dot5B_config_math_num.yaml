@@ -9,10 +9,10 @@ torch_dtype: bfloat16
 attn_implementation: flash_attention_2
 
 # Data training arguments
-dataset_name: src/cv_extraction/XR1-7500/exp
+dataset_name: src/cv_extraction/XR1-7500/exp_num_tt_012
 dataset_configs:
 - train
-num_processes: 3
+num_processes: 2
 
 # GRPO trainer config
 trainer_type: "XGRPOTrainer"
@@ -23,9 +23,9 @@ reward_weights: [1.0, 0.6, 1.0]
 #reward_weights: [0.0, 0.0, 1.0, 1.0]
 # part_of_gradient: True
 part_of_gradient: False
-reward_type: "regex"
-temperature: 0.6
-quick_eval_dataset: src/cv_extraction/MATH-500/exp
+reward_type: "num"
+temperature: 0.7
+quick_eval_dataset: src/cv_extraction/MATH-500/exp_num_tt_012
 bf16: true
 use_vllm: true
 vllm_device: auto
@@ -43,7 +43,7 @@ log_level: info
 logging_steps: 1
 logging_strategy: steps
 lr_scheduler_type: cosine
-max_prompt_length: 256
+max_prompt_length: 1024
 num_generations: 6
 num_iterations: 4   
 max_completion_length: 2048
@@ -53,7 +53,7 @@ output_dir: output/X-R1-1.5B
 #output_dir: output/X-R1-1.5B-1
 overwrite_output_dir: true
 per_device_eval_batch_size: 1
-per_device_train_batch_size: 2
+per_device_train_batch_size: 3
 push_to_hub: False
 report_to:
 - wandb

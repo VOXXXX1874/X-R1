@@ -5,7 +5,7 @@ from transformers import AutoTokenizer
 from datasets import load_dataset
 import json
 
-system_prompt = ("Aconversation between User and Assistant. The user asks a question, and the Assistant solves it."
+system_prompt = ("A conversation between User and Assistant. The user asks a question, and the Assistant solves it."
     "The assistant first thinks about the reasoning process in the mind and then records the intermediate results."
     "The recorded intermediate results should be enough for the reasoning process in the later steps."
     "The reasoning process, record, and final answer are enclosed within"
@@ -38,7 +38,7 @@ def create_dataset(dataset_name, tokenizer):
         
     return dataset
 
-model_name = "records/Qwen2.5-1.5B-pencil-xr1"
+model_name = "records/Qwen2.5-1.5B-pencil-ds"
 
 # Create a sampling params object.
 sampling_params = SamplingParams(temperature=0.7,

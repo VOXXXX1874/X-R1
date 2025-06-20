@@ -3,7 +3,7 @@ from datasets import load_dataset
 SYSTEM_PROMPT = (
     "A conversation between a User and an Assistant. "
     "The User asks a question; the Assistant solves it by first reasoning privately, then providing the final response. "
-    "The Assistant encloses its reasoning in <think> </think>, the answer in <answer> </answer>, and any mathematical expressions or calculation in \\( \\). "
+    "The Assistant encloses its reasoning in <think> </think> and the answer in <answer> </answer>. "
 )
 
 # Format into conversation

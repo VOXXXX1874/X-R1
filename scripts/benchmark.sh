@@ -118,7 +118,7 @@ CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark_MVOT_latent_pencil.py \
 	--layer=-1 \
 	--temperature=0.7 > output/benchmark_sampling.log 2>&1
 
-	CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark_MVOT_latent_pencil.py \
+CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark_MVOT_latent_pencil.py \
 	--model_name='./records/Qwen2.5-1.5B-pencil-xr1' \
     --dataset_name='src/cv_extraction/MATH-500/exp' \
 	--output_name='./output/result_benchmark_math500'  \
@@ -129,3 +129,13 @@ CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark_MVOT_latent_pencil.py \
 	--layer=-1 \
 	--temperature=0.7 \
 	--num_samples=1 > output/benchmark_sampling.log 2>&1
+
+CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
+	--model_name='Qwen/Qwen2.5-1.5B-Instruct' \
+    --dataset_name='src/cv_extraction/MATH-500/exp_num' \
+	--output_name='./output/result_benchmark_math500'  \
+	--max_output_tokens=4096 \
+	--num_gpus=1 \
+	--reward_function='eval_answer_thinking_reward' \
+	--tag False \
+	--reward_type 'num' > output/benchmark_sampling.log 2>&1

@@ -54,9 +54,9 @@ class GRPOConfig(trl.GRPOConfig):
         default=False,
         metadata={"help": "Apply gradient to part of the incorrect answer"},
     )
-    regex: bool = field(
-        default=False,
-        metadata={"help": "Use regex to match the steps."},
+    reward_type: str = field(
+        default="num",
+        metadata={"help": "Which type of thinking reward to use."},
     )
 
 @dataclass

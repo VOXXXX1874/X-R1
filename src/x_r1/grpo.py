@@ -30,11 +30,7 @@ from rewards import (
     accuracy_thinking_reward,
     accuracy_reward,
     thinking_reward,
-    format_reward,
-    get_cosine_scaled_reward,
-    get_repetition_penalty_reward,
-    len_reward,
-    reasoning_steps_reward,
+    format_reward
 )
 from utils.callbacks import get_callbacks
 from utils.prepare_dataset import prepare_dataset, prepare_quick_eval_dataset
@@ -98,20 +94,7 @@ def main(script_args, training_args, model_args):
         "accuracy_thinking": accuracy_thinking_reward,
         "accuracy": accuracy_reward,
         "thinking": thinking_reward,
-        "format": format_reward,
-        "reasoning_steps": reasoning_steps_reward,
-        "cosine": get_cosine_scaled_reward(
-            min_value_wrong=script_args.cosine_min_value_wrong,
-            max_value_wrong=script_args.cosine_max_value_wrong,
-            min_value_correct=script_args.cosine_min_value_correct,
-            max_value_correct=script_args.cosine_max_value_correct,
-            max_len=script_args.cosine_max_len,
-        ),
-        "repetition_penalty": get_repetition_penalty_reward(
-            ngram_size=script_args.repetition_n_grams,
-            max_penalty=script_args.repetition_max_penalty,
-        ),
-        "length": len_reward,
+        "format": format_reward
     }
     reward_funcs = [REWARD_FUNCS_REGISTRY[func] for func in script_args.reward_funcs]
 

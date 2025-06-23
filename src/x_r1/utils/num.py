@@ -26,7 +26,7 @@ def critical_value_reward_num(thinking_completion, process):
         for target in gold_targets:
             if target in thinking_completion_numbers:
                 reward += atom_reward
-                tmp = thinking_completion.index(str(target)) + len(str(target))
+                tmp = thinking_completion.find(str(target)) + len(str(target))
                 if tmp > final_end_pos:
                     final_end_pos = tmp
 

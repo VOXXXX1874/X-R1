@@ -50,16 +50,6 @@ CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
 	--reward_function='eval_answer_reward' \
 	--tag True > output/benchmark_sampling.log 2>&1
 
-CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
-	--model_name='Qwen/Qwen2.5-3B-Instruct' \
-    --dataset_name='src/cv_extraction/MATH-500/exp' \
-	--output_name='./output/result_benchmark_math500'  \
-	--max_output_tokens=4096 \
-	--num_gpus=1 \
-	--reward_function='eval_answer_thinking_reward' \
-	--tag False \
-	--regex True > output/benchmark_sampling.log 2>&1
-
 CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark_MVOT_rule.py \
 	--model_name='./records/Qwen2.5-1.5B-MVOT' \
     --dataset_name='src/cv_extraction/MATH-500/exp' \
@@ -132,10 +122,22 @@ CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark_MVOT_latent_pencil.py \
 
 CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
 	--model_name='Qwen/Qwen2.5-1.5B-Instruct' \
-    --dataset_name='src/cv_extraction/MATH-500/exp_num' \
+    --dataset_name='src/cv_extraction/MATH-500/exp_num_target' \
 	--output_name='./output/result_benchmark_math500'  \
 	--max_output_tokens=4096 \
 	--num_gpus=1 \
 	--reward_function='eval_answer_thinking_reward' \
 	--tag False \
-	--reward_type 'num' > output/benchmark_sampling.log 2>&1
+	--num_generation=8 \
+	--cv_type 'num' > output/benchmark_sampling.log 2>&1
+
+CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
+	--model_name='Qwen/Qwen2.5-1.5B-Instruct' \
+    --dataset_name='src/cv_extraction/MATH-500/exp_regex' \
+	--output_name='./output/result_benchmark_math500'  \
+	--max_output_tokens=4096 \
+	--num_gpus=1 \
+	--reward_function='eval_answer_thinking_reward' \
+	--tag False \
+	--num_generation=8 \
+	--cv_type 'regex' > output/benchmark_sampling.log 2>&1

@@ -81,14 +81,19 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
     answers = []
     prompts = []
     processes = []
+    count = 0
     for data in dataset:
         answers.append(data['answer'])
         prompts.append(data['prompt'])
         processes.append(data['process']) if 'process' in data else processes.append('')
+        count += 1
+        if count >= args.num_samples:
+            break
 
     # Create a sampling params object.
     sampling_params = SamplingParams(temperature=0.7,
                                      max_tokens=max_output_tokens,
+                                     n = args.num_generation,
                                      )
     # Create LLM object
     llm = LLM(model=model_name,  # replace your own model
@@ -110,41 +115,50 @@ def vllm_generate(model_name, output_name, dataset_name, num_gpus, max_output_to
     total_format = 0
     for output, gold_answer, gold_process in zip (outputs, answers, processes):
         prompt = output.prompt
-        completion = output.outputs[0].text
+        #print("Prompt: ", prompt)
 
-        print("Prompt: ", prompt)
-        print("completion:", completion)
-        if args.reward_function == 'eval_answer_reward':
-            acc_score, _ = eval_answer_reward(completion, gold_answer, args.tag, silence = False)
-            pro_score = 0
-        elif args.reward_function == 'eval_answer_thinking_reward':
-            acc_score, _ = eval_answer_reward(completion, gold_answer, args.tag, silence = False)
-            pro_score, step_end_pos = eval_thinking_reward(completion, gold_answer, gold_process, args.tag, reward_type = args.reward_type, silence = False)
-        acc_scores.append(acc_score)
-        pro_scores.append(pro_score)
-        total_acc = total_acc + acc_score
+        for output_completion in output.outputs:
+            completion = output_completion.text
+            #print("completion:", completion)
+            if args.reward_function == 'eval_answer_reward':
+                acc_score, _ = eval_answer_reward(completion, gold_answer, args.tag, silence = True)
+                pro_score = 0
+            elif args.reward_function == 'eval_answer_thinking_reward':
+                acc_score, _ = eval_answer_reward(completion, gold_answer, args.tag, silence = True)
+                pro_score, step_end_pos = eval_thinking_reward(completion, gold_answer, gold_process, args.tag, cv_type = args.cv_type, silence = True)
+            acc_scores.append(acc_score)
+            pro_scores.append(pro_score)
+            total_acc = total_acc + acc_score
 
-        format_score = format_reward(completion)
-        format_scores.append(format_score)
-        total_format = total_format + format_score
+            format_score = format_reward(completion)
+            format_scores.append(format_score)
+            total_format = total_format + format_score
 
-        # print('format score', format_score)
-        # print('accuracy score', acc_score)
-        # print('-'*100)
+            # print('format score', format_score)
+            # print('accuracy score', acc_score)
+            # print('-'*100)
 
-        result_all.append({
-            'prompt': prompt, 
-            'completion': completion, 
-            'gold answer': gold_answer, 
-            'acc scores': acc_score,  
-            'pro scores': pro_score,
-            'format score': format_score, 
-        })
+            result_all.append({
+                'prompt': prompt, 
+                'completion': completion, 
+                'gold answer': gold_answer, 
+                'acc scores': acc_score,  
+                'pro scores': pro_score,
+                'format score': format_score, 
+            })
 
     print('='*100)
+    print('eval num: ', len(acc_scores))
     print('eval acc: ', total_acc / len(acc_scores))
     print('eval pro: ', sum(pro_scores) / len(pro_scores))
     print('eval format: ',total_format / len(format_scores))
+
+    # Calculate the average pro scores for those completions with acc score == 0
+    pro_scores_zero_acc = [pro_score for pro_score, acc_score in zip(pro_scores, acc_scores) if acc_score == 0]
+    # Calculate the average pro scores for those completions with acc score == 1
+    pro_scores_one_acc = [pro_score for pro_score, acc_score in zip(pro_scores, acc_scores) if acc_score == 1]
+    print('eval pro for acc == 0: ', sum(pro_scores_zero_acc) / len(pro_scores_zero_acc) if pro_scores_zero_acc else 0)
+    print('eval pro for acc == 1: ', sum(pro_scores_one_acc) / len(pro_scores_one_acc) if pro_scores_one_acc else 0)
 
     current_result_file = output_name + '.json'
     with open(current_result_file, 'w', encoding='utf-8') as file:
@@ -171,8 +185,12 @@ if __name__ == "__main__":
                         help='reward function')
     parser.add_argument('--tag', type=lambda x: (str(x).lower() == 'true'), default=True,
                         help='tag or not')
-    parser.add_argument('--reward_type', type=str, default="num",
+    parser.add_argument('--cv_type', type=str, default="num",
                         help='which type of thinking reward to use, e.g., num, regex, gsc')
+    parser.add_argument('--num_generation', type=int, default=1,
+                        help='number of responses generated for each prompt')
+    parser.add_argument('--num_samples', type=int, default=99999999,
+                        help='number of samples to evaluate')
     args = parser.parse_args()
     print(args)
 

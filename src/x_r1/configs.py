@@ -54,7 +54,7 @@ class GRPOConfig(trl.GRPOConfig):
         default=False,
         metadata={"help": "Apply gradient to part of the incorrect answer"},
     )
-    reward_type: str = field(
+    cv_type: str = field(
         default="num",
         metadata={"help": "Which type of thinking reward to use."},
     )

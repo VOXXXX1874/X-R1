@@ -18,7 +18,7 @@ num_processes: 4
 trainer_type: "XGRPOTrainer"
 reward_funcs: ['accuracy', 'thinking', 'format']
 #reward_funcs: ['accuracy', 'thinking', 'accuracy_thinking', 'format']
-reward_weights: [1.0, 0.3, 1.0]
+reward_weights: [1.0, 0.1, 1.0]
 #reward_weights: [1.0, 0.0, 1.0]
 #reward_weights: [0.0, 0.0, 1.0, 1.0]
 # part_of_gradient: True
@@ -44,8 +44,8 @@ logging_steps: 1
 logging_strategy: steps
 lr_scheduler_type: cosine
 max_prompt_length: 256
-num_generations: 3
-num_iterations: 4   
+num_generations: 12
+num_iterations: 1   
 max_completion_length: 1024
 max_steps: -1
 num_train_epochs: 1

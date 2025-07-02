@@ -1,0 +1,16 @@
+The x_grpo_plus_trainer is not updated with trl. I will do more test about it when there are more gpus avaliable.
+
+I removed the "if liger then select column" in the SFTTrainer. It seems do not have any bad effect
+
+behavior inject and rl verify
+
+Hyperparameter to tune:
+1. Why the inner_loop always bring bad effect? Does the implementation have problems? How can I further confirm this?
+2. Try 3B model
+3. How to make RL work? How can It surpass the performance without RL?
+4. implement and tune the new method: maybe first test it on the gsc and part of gradient?
+5. implement and test the pencil rl
+6. more strict control variables
+7. Run more epochs instead of one epoch
+8. Why the new experiment perform worse on eval dataset than the old experiment? Is it because of hyperparameter?
+9. Is one epoch reasonable?

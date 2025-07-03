@@ -44,11 +44,11 @@ logging_steps: 1
 logging_strategy: steps
 lr_scheduler_type: cosine
 max_prompt_length: 256
-num_generations: 12
-num_iterations: 1   
+num_generations: 3
+num_iterations: 4   
 max_completion_length: 1024
 max_steps: -1
-num_train_epochs: 1
+num_train_epochs: 3
 output_dir: output/X-R1-1.5B
 #output_dir: output/X-R1-1.5B-1
 overwrite_output_dir: true

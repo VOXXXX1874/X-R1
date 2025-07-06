@@ -211,7 +211,7 @@ class XGRPOTrainer(GRPOTrainer):
                         else:
                             # Repeat all input columns (but "prompt" and "completion") to match the number of generations
                             # FIXME: Compatible with different train and eval dataset
-                            keys = [key for key in inputs[0] if key not in ["prompt", "completion"]]
+                            keys = [key for key in self.quick_eval_dataset[0] if key not in ["prompt", "completion"]]
                             reward_kwargs = {key: [example[key] for example in self.quick_eval_dataset] for key in keys}
                             output_reward_func, steps_final_pos = reward_func(completions=quick_eval_completions, cv_type = self.cv_type, silence = True, **reward_kwargs)
                             quick_eval_rewards[:, i] = torch.tensor(output_reward_func, dtype=torch.float32, device=device)

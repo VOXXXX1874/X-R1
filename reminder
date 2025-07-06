@@ -11,6 +11,5 @@ Hyperparameter to tune:
 4. implement and tune the new method: maybe first test it on the gsc and part of gradient?
 5. implement and test the pencil rl
 6. more strict control variables
-7. Run more epochs instead of one epoch
 8. Why the new experiment perform worse on eval dataset than the old experiment? Is it because of hyperparameter?
 9. Is one epoch reasonable?

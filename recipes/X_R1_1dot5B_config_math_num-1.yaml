@@ -3,13 +3,13 @@
 # running time 2~3h
 
 # Model arguments
-model_name_or_path: Qwen/Qwen2.5-1.5B-Instruct
+model_name_or_path: Qwen/Qwen2.5-1.5B
 model_revision: main
 torch_dtype: bfloat16
 attn_implementation: flash_attention_2
 
 # Data training arguments
-dataset_name: src/cv_extraction/XR1-1500/exp_num_tt_012
+dataset_name: src/cv_extraction/XR1-750/exp_num_tt_012
 dataset_configs:
 - train
 num_processes: 4
@@ -48,7 +48,7 @@ num_generations: 6
 num_iterations: 4   
 max_completion_length: 1024
 max_steps: -1
-num_train_epochs: 7
+num_train_epochs: 15
 #output_dir: output/X-R1-1.5B
 output_dir: output/X-R1-1.5B-1
 overwrite_output_dir: true

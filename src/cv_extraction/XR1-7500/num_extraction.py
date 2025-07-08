@@ -5,7 +5,7 @@ import re
 import random
 
 # Read the json file train.json
-with open("../XR1-1500/raw/train.json", "r") as f:
+with open("../XR1-750/raw/train.json", "r") as f:
     math_qa_dataset = json.load(f)
 
 # Initialize an empty list to store the processed data

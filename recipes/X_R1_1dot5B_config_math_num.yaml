@@ -3,13 +3,13 @@
 # running time 2~3h
 
 # Model arguments
-model_name_or_path: Qwen/Qwen2.5-1.5B
+model_name_or_path: Qwen/Qwen2.5-1.5B-instruct
 model_revision: main
 torch_dtype: bfloat16
 attn_implementation: flash_attention_2
 
 # Data training arguments
-dataset_name: src/cv_extraction/XR1-750/exp_num_tt_012
+dataset_name: src/cv_extraction/XR1-750/ext_exp_num_tt_012
 dataset_configs:
 - train
 num_processes: 4

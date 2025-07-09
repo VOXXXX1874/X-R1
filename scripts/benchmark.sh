@@ -24,6 +24,15 @@ CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
 	--tag False > output/benchmark_sampling.log 2>&1
 
 CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
+	--model_name='Qwen/Qwen2.5-1.5B' \
+    --dataset_name='HuggingFaceH4/MATH-500' \
+	--output_name='./output/result_benchmark_math500'  \
+	--max_output_tokens=4096 \
+	--num_gpus=1 \
+	--reward_function='eval_answer_reward' \
+	--tag False > output/benchmark_sampling.log 2>&1
+
+CUDA_VISIBLE_DEVICES=0 python ./src/x_r1/benchmark.py \
 	--model_name='Qwen/Qwen2.5-0.5B-Instruct' \
     --dataset_name='HuggingFaceH4/MATH-500' \
 	--output_name='./output/result_benchmark_math500'  \

@@ -54,9 +54,9 @@ def create_dataset(dataset_name, tokenizer):
 model_name = "Qwen/Qwen2.5-1.5B-instruct"
 
 # Create a sampling params object.
-sampling_params = SamplingParams(temperature=0.7,
+sampling_params = SamplingParams(temperature=0.9,
                                     max_tokens=4096,
-                                    n = 10
+                                    n = 20
                                     )
 # Create LLM object
 llm = LLM(model=model_name,  # replace your own model
@@ -68,7 +68,7 @@ llm = LLM(model=model_name,  # replace your own model
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-dataset = create_dataset('src/cv_extraction/XR1-750/raw', tokenizer)
+dataset = create_dataset('src/cv_extraction/XR1-7500/raw', tokenizer)
 
 prompts = []
 count = 0

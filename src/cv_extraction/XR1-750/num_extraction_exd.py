@@ -16,7 +16,7 @@ def extract_numbers_from_string(s):
     return [int(num) for num in numbers]
 
 # Read the json file train.json
-with open("extend/train.json", "r") as f:
+with open("../XR1-7500/extend/train.json", "r") as f:
     math_qa_dataset = json.load(f)
 
 # Initialize an empty list to store the processed data
@@ -27,6 +27,8 @@ num_distribution = {}
 num_in_ps = []
 # Iterate through each item in the dataset
 for item in math_qa_dataset:
+    if len(item['correct_responses']) / (len(item['wrong_responses']) + len(item['correct_responses'])) > 0.4 or len(item['correct_responses']) / (len(item['wrong_responses']) + len(item['correct_responses'])) < 0.2:
+        continue
     # Extract the question, solution, and answer from the item
     question = item['problem']
     solution = item['solution']
@@ -43,12 +45,9 @@ for item in math_qa_dataset:
         numbers_solution.update(extract_numbers_from_string(resp))
     
     # Find the numbers that are in the solution but not in the question and the answer
-    numbers_solution_not_in_qa = numbers_solution - numbers_question
-    # If there is no number in "numbers_solution_not_in_qa"
-    if not numbers_solution_not_in_qa:
-        target_cv = numbers_solution
-    else:
-        target_cv = numbers_solution_not_in_qa
+    target_cv = numbers_solution - numbers_question
+    if len(target_cv) < 5:
+        continue
     num_in_ps.append(" <sep> ".join([str(num) for num in list(numbers_solution.union(numbers_question))]))
 
     # Record the distribution of the appearance of numbers

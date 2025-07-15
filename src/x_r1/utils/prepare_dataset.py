@@ -1,25 +1,39 @@
 from datasets import load_dataset
 
-SYSTEM_PROMPT = (
+SYSTEM_PROMPT_TAG = (
     "A conversation between a User and an Assistant. "
     "The User asks a question; the Assistant solves it by first reasoning privately, then providing the final response. "
     "The Assistant encloses its reasoning in <think> </think> and the answer in <answer> </answer>. "
 )
 
+SYSTEM_PROMPT = (
+    "A conversation between a User and an Assistant. "
+    "The User asks a question; the Assistant solves it by first reasoning privately, then providing the final response. "
+    "The Assistant encloses its final answer in $\\boxed{}$."
+)
+
 # Format into conversation
-def make_conversation(example):
-    return {
-        "prompt": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": example["problem"]},
-        ],
-    }
+def make_conversation(example, tag=True):
+    if tag:
+        return {
+            "prompt": [
+                {"role": "system", "content": SYSTEM_PROMPT_TAG},
+                {"role": "user", "content": example["problem"]},
+            ],
+        }
+    else:
+        return {
+            "prompt": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": example["problem"]},
+            ],
+        }
     
 def make_latex(example):
     example["solution"] = '$' + str(example["solution"]) + '$'
     return example
 
-def prepare_dataset(dataset_name, split):
+def prepare_dataset(dataset_name, split, tag=True):
     dataset = load_dataset(dataset_name)
 
     # align the dataset
@@ -42,14 +56,14 @@ def prepare_dataset(dataset_name, split):
         dataset = dataset.rename_columns({"answer": "solution"})
         dataset = dataset.map(make_latex)
 
-    dataset = dataset.map(make_conversation)
+    dataset = dataset.map(make_conversation, fn_kwargs={"tag": tag})
     for split in dataset:
         if "messages" in dataset[split].column_names:
             dataset[split] = dataset[split].remove_columns("messages")
 
     return dataset
 
-def prepare_quick_eval_dataset(dataset_name):
+def prepare_quick_eval_dataset(dataset_name, tag=True):
     quick_eval_dataset = load_dataset(dataset_name)
 
     if "AIME_2024" in dataset_name:
@@ -58,7 +72,7 @@ def prepare_quick_eval_dataset(dataset_name):
         quick_eval_dataset = quick_eval_dataset.rename_column("Answer", "solution")
         quick_eval_dataset = quick_eval_dataset.rename_column("Problem", "problem")
         quick_eval_dataset = quick_eval_dataset.map(make_latex)
-        quick_eval_dataset = quick_eval_dataset.map(make_conversation)
+        quick_eval_dataset = quick_eval_dataset.map(make_conversation, fn_kwargs={"tag": tag})
         quick_eval_dataset = quick_eval_dataset['train']
         # display one example from the dataset
         print('Example from quick_eval_dataset:', quick_eval_dataset[0])
@@ -66,14 +80,14 @@ def prepare_quick_eval_dataset(dataset_name):
         quick_eval_dataset = quick_eval_dataset.remove_columns("solution")
         quick_eval_dataset = quick_eval_dataset.rename_column("answer", "solution")
         quick_eval_dataset = quick_eval_dataset.map(make_latex)
-        quick_eval_dataset = quick_eval_dataset.map(make_conversation)
+        quick_eval_dataset = quick_eval_dataset.map(make_conversation, fn_kwargs={"tag": tag})
         quick_eval_dataset = quick_eval_dataset['test']
         # display one example from the dataset
         print('Example from quick_eval_dataset:', quick_eval_dataset[0])
     elif "gsc" in dataset_name:
         quick_eval_dataset = quick_eval_dataset.rename_column("answer", "solution")
         quick_eval_dataset = quick_eval_dataset.map(make_latex)
-        quick_eval_dataset = quick_eval_dataset.map(make_conversation)
+        quick_eval_dataset = quick_eval_dataset.map(make_conversation, fn_kwargs={"tag": tag})
         quick_eval_dataset = quick_eval_dataset['test']
         # display one example from the dataset
         print('Example from quick_eval_dataset:', quick_eval_dataset[0])

@@ -17,7 +17,7 @@ from datasets import load_dataset, Dataset, DatasetDict
 from vllm import LLM, SamplingParams
 import argparse
 import json
-from utils.prepare_dataset import SYSTEM_PROMPT
+from utils.prepare_dataset import SYSTEM_PROMPT, SYSTEM_PROMPT_TAG
 from rewards import eval_answer_reward, eval_thinking_reward
 # import torch
 import re
@@ -40,14 +40,14 @@ def create_dataset(dataset_name, tokenizer, tag):
         if tag:
             return {
                 "prompt": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "system", "content": SYSTEM_PROMPT_TAG},
                     {"role": "user", "content": example["problem"]},
                 ],
             }
         else:
             return {
                 "prompt": [
-                    {"role": "system", "content": 'Please solve the problem step by step. Put the answer in the answer box \\boxed{} and any mathematical expressions or calculation in \\( \\)'},
+                    {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": example["problem"]},
                 ]
             }

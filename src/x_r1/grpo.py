@@ -33,7 +33,8 @@ from rewards import (
     format_reward
 )
 from utils.callbacks import get_callbacks
-from utils.prepare_dataset import prepare_dataset, prepare_quick_eval_dataset
+import utils.prepare_dataset
+from utils.prepare_dataset import prepare_dataset, prepare_quick_eval_dataset, SYSTEM_PROMPT_TAG
 from utils.wandb_logging import init_wandb_training
 from x_grpo_trainer import XGRPOTrainer
 from x_grpo_plus_trainer import XGRPOPlusTrainer
@@ -84,10 +85,10 @@ def main(script_args, training_args, model_args):
         init_wandb_training(training_args)
 
     # Load the dataset
-    dataset = prepare_dataset(script_args.dataset_name, script_args.dataset_train_split)
+    dataset = prepare_dataset(script_args.dataset_name, script_args.dataset_train_split, training_args.tag)
 
     if script_args.quick_eval_dataset:
-        quick_eval_dataset = prepare_quick_eval_dataset(script_args.quick_eval_dataset)
+        quick_eval_dataset = prepare_quick_eval_dataset(script_args.quick_eval_dataset, training_args.tag)
 
     # Get reward functions
     REWARD_FUNCS_REGISTRY = {

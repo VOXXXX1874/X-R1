@@ -62,13 +62,13 @@ def outcome_reward(answer, solution):
     return gold_parsed, answer_parsed, reward
 
 # for training
-def accuracy_reward(completions, solution, silence=False, **kwargs):
+def accuracy_reward(completions, solution, tag=True, silence=False, **kwargs):
     """Reward function that checks if the completion is the same as the ground truth."""
     contents = [completion[0]["content"] for completion in completions]
     rewards = []
     for content, sol in zip(contents, solution):
         # First try latex parsing
-        answer = extract_answer(content)
+        answer = extract_answer(content) if tag else content
         gold_parsed, answer_parsed, reward = outcome_reward(answer, sol)
         # print('\nprompt:', prompt)
         if not silence:
@@ -84,14 +84,14 @@ def accuracy_reward(completions, solution, silence=False, **kwargs):
 
     return rewards, []
 
-def thinking_reward(completions, solution, process, silence=False, cv_type = "num", **kwargs):
+def thinking_reward(completions, solution, process, tag=True, silence=False, cv_type = "num", **kwargs):
     """Reward function that checks if the completion is the same as the ground truth and assign partial reward for crucial thinking results."""
     contents = [completion[0]["content"] for completion in completions]
     rewards = []
     steps_end_pos = []
     for content, pro in zip(contents, process):
         # parse ground truth process
-        thinking_completion = extract_thinking(content)
+        thinking_completion = extract_thinking(content) if tag else content
         if cv_type == "gsc":
             reward, step_end_pos = critical_value_reward_gsc(thinking_completion, pro)
         elif cv_type == "regex":
@@ -107,19 +107,19 @@ def thinking_reward(completions, solution, process, silence=False, cv_type = "nu
 
     return rewards, steps_end_pos
         
-def accuracy_thinking_reward(completions, solution, process, silence=False, cv_type="num", **kwargs):
+def accuracy_thinking_reward(completions, solution, process, tag=True, silence=False, cv_type="num", **kwargs):
     """Reward function that checks if the completion is the same as the ground truth and assign partial reward for crucial thinking results."""
     contents = [completion[0]["content"] for completion in completions]
     rewards = []
     steps_end_pos = []
     for content, sol, pro in zip(contents, solution, process):
         # outcome reward
-        answer = extract_answer(content)
+        answer = extract_answer(content) if tag else content
         gold_parsed, answer_parsed, reward = outcome_reward(answer, sol)
         # process reward
         if reward == 0.0:
             # parse ground truth process
-            thinking_completion = extract_thinking(content)
+            thinking_completion = extract_thinking(content)  if tag else content
             if cv_type == "gsc":
                 step_end_pos = critical_value_reward_gsc(thinking_completion, pro)
             elif cv_type == "regex":

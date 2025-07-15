@@ -58,6 +58,10 @@ class GRPOConfig(trl.GRPOConfig):
         default="num",
         metadata={"help": "Which type of thinking reward to use."},
     )
+    tag: bool = field(
+        default=True,
+        metadata={"help": "Whether to use <think> and <answer> tags in responses."},
+    )
 
 @dataclass
 class GRPOScriptArguments(ScriptArguments):

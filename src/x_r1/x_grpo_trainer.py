@@ -155,6 +155,8 @@ class XGRPOTrainer(GRPOTrainer):
         self.part_of_gradient = args.part_of_gradient
         # Assign the reward type
         self.cv_type = args.cv_type
+        # Determine whether to use tag in response
+        self.tag = args.tag
 
     def _generate_and_score_completions(self, inputs: dict[str, Union[torch.Tensor, Any]]) -> dict[str, Union[torch.Tensor, Any]]:
         device = self.accelerator.device
@@ -213,7 +215,7 @@ class XGRPOTrainer(GRPOTrainer):
                             # FIXME: Compatible with different train and eval dataset
                             keys = [key for key in self.quick_eval_dataset[0] if key not in ["prompt", "completion"]]
                             reward_kwargs = {key: [example[key] for example in self.quick_eval_dataset] for key in keys}
-                            output_reward_func, steps_final_pos = reward_func(completions=quick_eval_completions, cv_type = self.cv_type, silence = True, **reward_kwargs)
+                            output_reward_func, steps_final_pos = reward_func(completions=quick_eval_completions, tag = self.tag, cv_type = self.cv_type, silence = True, **reward_kwargs)
                             quick_eval_rewards[:, i] = torch.tensor(output_reward_func, dtype=torch.float32, device=device)
                             # write the reward to the metrics
                             self._metrics['train'][f"quick_eval_rewards/{reward_func.__name__}"].append(quick_eval_rewards[:, i].mean().item())
@@ -321,7 +323,7 @@ class XGRPOTrainer(GRPOTrainer):
                 # Repeat all input columns (but "prompt" and "completion") to match the number of generations
                 keys = [key for key in inputs[0] if key not in ["prompt", "completion"]]
                 reward_kwargs = {key: [example[key] for example in inputs] for key in keys}
-                output_reward_func, steps_final_pos = reward_func(prompts=prompts, completions=completions, cv_type = self.cv_type, **reward_kwargs)
+                output_reward_func, steps_final_pos = reward_func(completions=completions, tag = self.tag, cv_type = self.cv_type, **reward_kwargs)
                 if len(steps_final_pos) > 0 and self.part_of_gradient:
                     completion_mask_adjustment = steps_final_pos
                 rewards_per_func[:, i] = torch.tensor(output_reward_func, dtype=torch.float32, device=device)

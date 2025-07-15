@@ -18,12 +18,14 @@ num_processes: 4
 trainer_type: "XGRPOTrainer"
 reward_funcs: ['accuracy', 'thinking', 'format']
 #reward_funcs: ['accuracy', 'thinking', 'accuracy_thinking', 'format']
-reward_weights: [1.0, 0.3, 1.0]
+reward_weights: [1.0, 0.3, 0.0]
 #reward_weights: [1.0, 0.0, 1.0]
 #reward_weights: [0.0, 0.0, 1.0, 1.0]
 # part_of_gradient: True
 part_of_gradient: False
+beta: 0.0
 cv_type: "num"
+tag: False
 temperature: 0.7
 quick_eval_dataset: src/cv_extraction/MATH-500/exp_num_tt_012
 bf16: true

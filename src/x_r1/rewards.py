@@ -19,20 +19,26 @@ def extract_final(completion):
     else:
         return "No answer found"
 
-def extract_answer(text):
+def extract_answer(text, tag=True):
     """Extract content between <answer> tags."""
     if text is None:
         return ""
-    match = re.search(r'<answer>(.*?)</answer>$', text, re.DOTALL)
+    if tag: # If tag is True, we expect the text to be wrapped in <answer> tags
+        match = re.search(r'<answer>(.*?)</answer>$', text, re.DOTALL)
+    else: # If tag is False, we expect the text to be in "\boxed{...}" format
+        match = re.search(r'\\boxed{(.*?)}', text, re.DOTALL)
     if match:
         return match.group(1).strip()
     return ""
 
-def extract_thinking(text):
+def extract_thinking(text, tag=True):
     """Extract content between <think> tags."""
     if text is None:
         return ""
-    match = re.search(r'^<think>(.*?)</think>', text, re.DOTALL)
+    if tag:  # If tag is True, we expect the text to be wrapped in <think> tags
+        match = re.search(r'^<think>(.*?)</think>', text, re.DOTALL)
+    else:  # If tag is False, we expect the text to be before the "\boxed{...}" format
+        match = re.search(r'^(.*?)(?=\\boxed{)', text, re.DOTALL)
     if match:
         return match.group(1).strip()
     return ""
@@ -68,7 +74,7 @@ def accuracy_reward(completions, solution, tag=True, silence=False, **kwargs):
     rewards = []
     for content, sol in zip(contents, solution):
         # First try latex parsing
-        answer = extract_answer(content) if tag else content
+        answer = extract_answer(content, tag)
         gold_parsed, answer_parsed, reward = outcome_reward(answer, sol)
         # print('\nprompt:', prompt)
         if not silence:
@@ -91,7 +97,7 @@ def thinking_reward(completions, solution, process, tag=True, silence=False, cv_
     steps_end_pos = []
     for content, pro in zip(contents, process):
         # parse ground truth process
-        thinking_completion = extract_thinking(content) if tag else content
+        thinking_completion = extract_thinking(content, tag)
         if cv_type == "gsc":
             reward, step_end_pos = critical_value_reward_gsc(thinking_completion, pro)
         elif cv_type == "regex":
@@ -114,12 +120,12 @@ def accuracy_thinking_reward(completions, solution, process, tag=True, silence=F
     steps_end_pos = []
     for content, sol, pro in zip(contents, solution, process):
         # outcome reward
-        answer = extract_answer(content) if tag else content
+        answer = extract_answer(content, tag)
         gold_parsed, answer_parsed, reward = outcome_reward(answer, sol)
         # process reward
         if reward == 0.0:
             # parse ground truth process
-            thinking_completion = extract_thinking(content)  if tag else content
+            thinking_completion = extract_thinking(content, tag)
             if cv_type == "gsc":
                 step_end_pos = critical_value_reward_gsc(thinking_completion, pro)
             elif cv_type == "regex":
@@ -144,7 +150,7 @@ def accuracy_thinking_reward(completions, solution, process, tag=True, silence=F
 def eval_answer_reward(completion, solution, tag=False, silence=False, **kwargs):
     """Reward function that checks if the completion is the same as the ground truth."""
     # outcome reward
-    completion = extract_answer(completion) if tag else completion
+    completion = extract_answer(completion, tag)
     gold_parsed, answer_parsed, reward = outcome_reward(completion, solution)
     if not silence:
         print('-'*100)
@@ -173,7 +179,7 @@ def eval_answer_reward_MVOT(completion, solution, silence=False, **kwargs):
 
 def eval_thinking_reward(completion, solution, process, tag=False, cv_type = "num", silence=False, **kwargs):
     """Reward function that checks if the completion is the same as the ground truth and assign partial reward for crucial thinking results."""
-    thinking_completion = extract_thinking(completion) if tag else completion
+    thinking_completion = extract_thinking(completion, tag)
     if cv_type == "gsc":
         reward, step_end_pos = critical_value_reward_gsc(thinking_completion, process)
     elif cv_type == "regex":

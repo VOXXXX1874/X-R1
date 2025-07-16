@@ -28,17 +28,17 @@ class expression_node:
         Computes the similarity between this node and another expression_node.
         The similarity is based on the number of common elements in numbers, operators, and phrases.
         """
-        total_numbers = len(self.numbers) + len(another_node.numbers) + 1e-1
+        total_numbers = min(len(self.numbers), len(another_node.numbers)) + 1e-1
         common_numbers = len(self.numbers.intersection(another_node.numbers))
         incommon_numbers = len(self.numbers - another_node.numbers) + len(another_node.numbers - self.numbers)
         similarity_numbers = (common_numbers - incommon_numbers) / total_numbers
         
-        total_operators = len(self.operators) + len(another_node.operators) + 1e-1
+        total_operators = min(len(self.operators), len(another_node.operators)) + 1e-1
         common_operators = len(self.operators.intersection(another_node.operators))
         incommon_operators = len(self.operators - another_node.operators) + len(another_node.operators - self.operators)
         similarity_operators = (common_operators - incommon_operators) / total_operators
 
-        total_phrases = len(self.phrases) + len(another_node.phrases) + 1e-1
+        total_phrases = min(len(self.phrases), len(another_node.phrases)) + 1e-1
         common_phrases = len(self.phrases.intersection(another_node.phrases))
         incommon_phrases = len(self.phrases - another_node.phrases) + len(another_node.phrases - self.phrases)
         similarity_phrases = (common_phrases - incommon_phrases) / total_phrases

@@ -2,13 +2,13 @@ from datasets import load_dataset
 
 SYSTEM_PROMPT_TAG = (
     "A conversation between a User and an Assistant. "
-    "The User asks a question; the Assistant solves it by first reasoning privately, then providing the final response. "
+    "The User asks a question; the Assistant solves it by first reasoning privately, then providing the final answer. "
     "The Assistant encloses its reasoning in <think> </think> and the answer in <answer> </answer>. "
 )
 
 SYSTEM_PROMPT = (
     "A conversation between a User and an Assistant. "
-    "The User asks a question; the Assistant solves it by first reasoning privately, then providing the final response. "
+    "The User asks a question; the Assistant solves it by first reasoning, then providing the final answer. "
     "The Assistant encloses its final answer in $\\boxed{}$."
 )
 

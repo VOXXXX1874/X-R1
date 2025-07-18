@@ -12,39 +12,54 @@ class number_node:
     The node contains existing numbers and new number
     It also contains value of this state and links to other states.
     """
-    def __init__(self, existing_numbers, new_number):
+    def __init__(self, existing_numbers, new_number, index):
+        self.index = index
         self.existing_numbers = existing_numbers
         self.new_number = new_number
         self.state_value = 0  # Placeholder for the value of the expression
         self.links = []  # Links to other nodes can be added later
 
     def __repr__(self):
-        return f"number_node(existing_numbers={self.existing_numbers}, new_numbers={self.new_number}, links={self.links})"
+        links_index = ", ".join(str({"node": link['node'].index, "num_pass": str(link['num_pass'])}) for link in self.links)
+        return f"number_node(index={self.index}, existing_numbers={self.existing_numbers}, new_number={self.new_number}, links=[{links_index}])"
     
     def similarity(self, another_node):
         """
         Calculates the similarity between the existing numbers of this node and another number_node.
         Returns a float value representing the similarity.
         """
-        this_node_number_set = self.existing_numbers.union({self.new_number}) if self.new_number else self.existing_numbers
-        another_node_number_set = another_node.existing_numbers.union({another_node.new_number}) if another_node.new_number else another_node.existing_numbers
+        this_node_number_set = self.existing_numbers.union({self.new_number}) if self.new_number != None else self.existing_numbers
+        another_node_number_set = another_node.existing_numbers.union({another_node.new_number}) if another_node.new_number != None else another_node.existing_numbers
         # Calculate the similarity based on the existing numbers
         common_numbers = this_node_number_set.intersection(another_node_number_set)
         total_numbers = this_node_number_set.union(another_node_number_set)
         similarity_score = len(common_numbers) / len(total_numbers) if total_numbers else 0
         return similarity_score
     
-    def update_link(self, node_index, num_pass):
+    def update_link(self, node, num_pass):
         """
         Updates the link to another node based on the node index and the number of passes.
         This method can be used to establish connections between nodes in the tree.
         """
         for link in self.links:
-            if link['node_index'] == node_index:
+            if link['node'].index == node.index:
+                # If the link already exists, update the number of passes
                 link['num_pass'] += num_pass
                 return
         else:
-            self.links.append({'node_index': node_index, 'num_pass': num_pass})
+            self.links.append({'node': node, 'num_pass': num_pass})
+
+    def sync_links(self):
+        """
+        If there are multiple links to the same node, sum them up.
+        """
+        link_dict = {}
+        for link in self.links:
+            if link['node'].index in link_dict:
+                link_dict[link['node'].index]['num_pass'] += link['num_pass']
+            else:
+                link_dict[link['node'].index] = {'node': link['node'], 'num_pass': link['num_pass']}
+        self.links = list(link_dict.values())
 
     def merge(self, another_node):
         """
@@ -64,18 +79,60 @@ class MDP_tree:
         Initializes the MDP_tree with a list of expressions and their end positions.
         Each expression is parsed into an expression_node.
         """
-        self.root_node = number_node(existing_numbers=set(), new_number=None)
-        self.node_list = [self.root_node]
-        self.wrong_state = -1
-        self.correct_state = -1
+        self.root_node = number_node(existing_numbers=set(), new_number=None, index=0)
+        self.wrong_state = None
+        self.correct_state = None
+        self.node_count = 1
         self.update(expression_list, final_reward)
 
     def __repr__(self):
+        """Returns a string representation of the MDP_tree through bfs traversal."""
+        nodes = []
+        queue = [self.root_node]
+        visited = set()
+        while queue:
+            current_node = queue.pop(0)
+            if current_node.index in visited:
+                continue
+            visited.add(current_node.index)
+            nodes.append(str(current_node))
+            for link in current_node.links:
+                queue.append(link['node'])
+        return "MDP_tree(" + ", ".join(nodes) + ")"
+    
+    def __len__(self):
+        """Count the real number of nodes in the MDP_tree through bfs traversal."""
+        count = 0
+        queue = [self.root_node]
+        visited = set()
+        while queue:
+            current_node = queue.pop(0)
+            if current_node.index in visited:
+                continue
+            visited.add(current_node.index)
+            count += 1
+            for link in current_node.links:
+                queue.append(link['node'])
+        return count
+
+    def bfs_similarity_search(self, node, similarity_threshold=1.0):
         """
-        Returns a string representation of the MDP_tree.
+        Performs a breadth-first search to find a node that is similar to the given node.
+        Returns the similar node and its index if found, otherwise returns None and -1.
         """
-        sep = ": "
-        return f"MDP_tree with {len(self.node_list)} nodes: {[str(i) + sep + str(node) for i, node in enumerate(self.node_list)]}"
+        queue = [self.root_node]
+        visited = set()
+        while queue:
+            current_node = queue.pop(0)
+            if current_node.index in visited:
+                continue
+            visited.add(current_node.index)
+            if current_node.similarity(node) >= similarity_threshold:
+                return current_node, current_node.index
+            for link in current_node.links:
+                queue.append(link['node'])
+        # If no similar node is found, return None and -1
+        return None, -1
     
     def update(self, expression_list, final_reward=0):
         """
@@ -88,83 +145,68 @@ class MDP_tree:
             # Extract numbers from the expression using regex
             numbers.extend(number_parse(expression))
         # Parse the new numbers and create nodes
-        last_node_index = 0
+        last_node = self.root_node
         for i, number in enumerate(numbers):
             # if the new number is not new, continue
-            if number in self.node_list[last_node_index].existing_numbers or number == self.node_list[last_node_index].new_number:
+            if number in last_node.existing_numbers or number == last_node.new_number:
                 continue
             # Create a new node with the existing numbers and the new number
-            existing_numbers = deepcopy(self.node_list[last_node_index].existing_numbers)
-            if self.node_list[last_node_index].new_number:
-                existing_numbers.add(self.node_list[last_node_index].new_number)
-            node = number_node(existing_numbers=existing_numbers, new_number=number)
+            existing_numbers = deepcopy(last_node.existing_numbers)
+            if last_node.new_number:
+                existing_numbers.add(last_node.new_number)
+            node = number_node(existing_numbers=existing_numbers, new_number=number, index=self.node_count)
             # Search for nodes that share the same new number
-            similar_node_index = -1
-            for i, existing_node in enumerate(self.node_list[1:], start=1):
-                if existing_node.similarity(node) > 0.999:
-                    similar_node_index = i
-                    break
+            similar_node, similar_node_index = self.bfs_similarity_search(
+                node,
+                similarity_threshold=1.0,
+            )
             # If a similar node is found, merge it; otherwise, add a new node
             if similar_node_index != -1:
-                if last_node_index != similar_node_index:
-                    self.node_list[last_node_index].update_link(similar_node_index, 1)
-                last_node_index = similar_node_index
-                self.node_list[similar_node_index].merge(node)
+                last_node.update_link(similar_node, 1)
+                last_node = similar_node
+                similar_node.merge(node)
             else:
-                self.node_list[last_node_index].update_link(len(self.node_list), 1)
-                self.node_list.append(node)
-                last_node_index = len(self.node_list) - 1
+                last_node.update_link(node, 1)
+                last_node = node
+                self.node_count += 1
 
         if final_reward < 0.5:
-            if self.wrong_state == -1:
-                node = number_node(existing_numbers=set(), new_number=None)
+            if self.wrong_state == None:
+                node = number_node(existing_numbers=set(), new_number=None, index=self.node_count)
+                self.node_count += 1
                 node.state_value = final_reward  # Set the last node's value to final_reward (final state)
-                self.node_list[last_node_index].update_link(len(self.node_list), 1)
-                self.wrong_state = len(self.node_list)
-                self.node_list.append(node)
+                last_node.update_link(node, 1)
+                self.wrong_state = node
             else:
-                self.node_list[last_node_index].update_link(self.wrong_state, 1)
+                last_node.update_link(self.wrong_state, 1)
         else:
-            if self.correct_state == -1:
-                node = number_node(existing_numbers=set(), new_number=None)
+            if self.correct_state == None:
+                node = number_node(existing_numbers=set(), new_number=None, index=self.node_count)
+                self.node_count += 1
                 node.state_value = final_reward # Set the last node's value to final_reward (final state)
-                self.node_list[last_node_index].update_link(len(self.node_list), 1)
-                self.correct_state = len(self.node_list)
-                self.node_list.append(node)
+                last_node.update_link(node, 1)
+                self.correct_state = node
             else:
-                self.node_list[last_node_index].update_link(self.correct_state, 1)
+                last_node.update_link(self.correct_state, 1)
 
     def trim(self):
         """
-        Trims the MDP_tree by removing nodes that has only one pass.
-        This method performs a depth-first search (DFS) to identify and remove nodes recursively.
+        Trims the MDP_tree by removing branch that directly leads to the wrong state by dfs
         """
-        def dfs(node_index, parent_index):
-            """
-            Depth-first search to trim the MDP_tree.
-            """
-            node = self.node_list[node_index]
-            # If the node has only one link, remove it
-            if len(node.links) == 1 and node.links[0]['num_pass'] == 1:
-                # Remove the link from the parent node
-                if parent_index != -1:
-                    parent_node = self.node_list[parent_index]
-                    parent_node.links = [link for link in parent_node.links if link['node_index'] != node_index]
-                # Remove the node from the tree
-                self.node_list[node_index] = None
+        def dfs(node):
+            # Perform a depth-first search to find and remove branches leading to the wrong state
+            for link in node.links:
+                if dfs(link['node']):
+                    link['node'] = self.wrong_state
+            node.sync_links()  # Sync links to remove duplicates
+            if len(node.links) == 1 and node.links[0]["node"].index == self.wrong_state.index:
+                # If the node has only one link to the wrong state, remove it
                 return True
-            else:
-                # Recursively check all links
-                for link in node.links:
-                    if dfs(link['node_index'], node_index):
-                        # If a child was removed, update the links
-                        node.links = [l for l in node.links if l['node_index'] != link['node_index']]
+            # If the node has no links or more than one link, keep it
             return False
 
         # Start DFS from the root node
-        dfs(0, -1)
-        # Remove None nodes from the list
-        self.node_list = [node for node in self.node_list if node is not None]
+        dfs(self.root_node)
         
 
 def number_parse(
@@ -257,13 +299,14 @@ def extract_target_from_pred(
 #            extraction_config=[LatexExtractionConfig()],
 #        )
 ## Update the MDP tree with the new response
-#mdp_tree.update(states, 1)
+#mdp_tree.update(states, 0)
 ## Print the MDP tree to see the structure
+#mdp_tree.trim()  # Optional: trim the tree to remove branches leading to wrong state
 #print(mdp_tree)
 #exit()
 
 # Read the json file train.json
-with open("XR1-7500/extend/train.json", "r") as f:
+with open("XR1-hard/extend20/train.json", "r") as f:
     math_qa_dataset = json.load(f)
 
 # Initialize an empty list to store the processed data
@@ -273,8 +316,8 @@ count = 0
 for item in math_qa_dataset:
     # Extract the solution, correct_responses, and wrong_responses
     solution = item.get("solution", "")
-    correct_responses = item.get("correct_responses", [])
-    wrong_responses = item.get("wrong_responses", [])
+    correct_responses = item.pop("correct_responses", [])
+    wrong_responses = item.pop("wrong_responses", [])
     # Create a new MDP_tree for the solution
     solution_states, solution_positions = thinking_parse(
         solution,
@@ -295,14 +338,16 @@ for item in math_qa_dataset:
             extraction_config=[LatexExtractionConfig()],
         )
         problem_mdp_tree.update(wrong_states, 0)
-
+    # Trim the MDP tree if it is too large
+    if len(problem_mdp_tree) > 100:
+        problem_mdp_tree.trim()
     # Store the MDP tree 
     item["MDP_tree"] = problem_mdp_tree.__repr__()
     # Add the MDP tree to MDP_tree_math_qa_dataset
     MDP_tree_math_qa_dataset.append(item)
     count += 1
-    if count == 5:
-        break
+    if count % 50 == 0:
+        print(f"Processed {count} items.")
 
 # Save the processed data to a new json file
 with open("train_MDP_tree.json", "w") as f:

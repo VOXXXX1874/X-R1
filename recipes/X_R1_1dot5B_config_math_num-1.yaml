@@ -23,7 +23,7 @@ reward_weights: [1.0, 0.0, 0.0]
 #reward_weights: [0.0, 0.0, 1.0, 1.0]
 # part_of_gradient: True
 part_of_gradient: False
-beta: 0.01
+beta: 0.001
 cv_type: "num"
 tag: False
 temperature: 0.7

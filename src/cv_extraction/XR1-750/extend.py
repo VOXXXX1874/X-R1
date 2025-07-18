@@ -56,7 +56,7 @@ model_name = "Qwen/Qwen2.5-1.5B-instruct"
 # Create a sampling params object.
 sampling_params = SamplingParams(temperature=0.9,
                                     max_tokens=4096,
-                                    n = 20
+                                    n = 600,
                                     )
 # Create LLM object
 llm = LLM(model=model_name,  # replace your own model
@@ -68,7 +68,7 @@ llm = LLM(model=model_name,  # replace your own model
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-dataset = create_dataset('src/cv_extraction/XR1-7500/raw', tokenizer)
+dataset = create_dataset('src/cv_extraction/XR1-hard/extend20/', tokenizer)
 
 prompts = []
 count = 0
@@ -89,6 +89,8 @@ for output, data in zip(outputs, dataset):
     correct_responses = []
     wrong_responses = []
     for i in range(len(output.outputs)):
+        if "\\boxed" not in output.outputs[i].text:
+            continue
         if outcome_reward(output.outputs[i].text, data['solution'])[2] > 0.5:
             correct_responses.append(output.outputs[i].text)
         else:

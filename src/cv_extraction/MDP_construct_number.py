@@ -18,10 +18,12 @@ class number_node:
         self.new_number = new_number
         self.state_value = 0  # Placeholder for the value of the expression
         self.links = []  # Links to other nodes can be added later
+        self.value_updated = False  # Flag to indicate if the value has been updated
 
     def __repr__(self):
         links_index = ", ".join(str({"node": link['node'].index, "num_pass": str(link['num_pass'])}) for link in self.links)
-        return f"number_node(index={self.index}, existing_numbers={self.existing_numbers}, new_number={self.new_number}, links=[{links_index}])"
+        # keep two decimal places for the state value
+        return f"number_node(index={self.index}, existing_numbers={self.existing_numbers}, new_number={self.new_number}, links=[{links_index}], state_value={self.state_value:.2f})"
     
     def similarity(self, another_node):
         """
@@ -152,7 +154,7 @@ class MDP_tree:
                 continue
             # Create a new node with the existing numbers and the new number
             existing_numbers = deepcopy(last_node.existing_numbers)
-            if last_node.new_number:
+            if last_node.new_number != None:
                 existing_numbers.add(last_node.new_number)
             node = number_node(existing_numbers=existing_numbers, new_number=number, index=self.node_count)
             # Search for nodes that share the same new number
@@ -207,8 +209,49 @@ class MDP_tree:
 
         # Start DFS from the root node
         dfs(self.root_node)
-        
 
+    def update_node_value(self):
+        """
+        Recursively updates the value of each node base on the value of the final state.
+        The value of each node is weighted sum of the values of its children.
+        """
+        def dfs(node):
+            if node.index == self.wrong_state.index or node.index == self.correct_state.index or node.value_updated:
+                # If the node is a final state or already updated, return its value
+                return node.state_value
+            total_value = 0
+            total_links = 0
+            # Recursively calculate the value of each child node
+            # and update the total value and total links
+            for link in node.links:
+                child_value = dfs(link['node'])
+                total_value += child_value * link['num_pass']
+                total_links += link['num_pass']
+            if total_links > 0:
+                node.state_value = total_value / total_links
+            else:
+                node.state_value = 0
+            node.value_updated = True  # Mark the node as updated
+            return node.state_value
+        
+        def reset_value_updated_flag_bfs(node):
+            """Resets the value_updated flag for all nodes in the tree using BFS."""
+            queue = [node]
+            visited = set()
+            while queue:
+                current_node = queue.pop(0)
+                if current_node.index in visited:
+                    continue
+                visited.add(current_node.index)
+                current_node.value_updated = False
+                for link in current_node.links:
+                    queue.append(link['node'])
+
+        # Start DFS from the root node
+        dfs(self.root_node)
+        # Reset the "value_updated" flag for all nodes
+        reset_value_updated_flag_bfs(self.root_node)
+        
 def number_parse(
     pred: str,
 ):
@@ -341,13 +384,14 @@ for item in math_qa_dataset:
     # Trim the MDP tree if it is too large
     if len(problem_mdp_tree) > 100:
         problem_mdp_tree.trim()
+    # Update the node values in the MDP tree
+    problem_mdp_tree.update_node_value()
     # Store the MDP tree 
     item["MDP_tree"] = problem_mdp_tree.__repr__()
     # Add the MDP tree to MDP_tree_math_qa_dataset
     MDP_tree_math_qa_dataset.append(item)
     count += 1
-    if count % 50 == 0:
-        print(f"Processed {count} items.")
+    print(f"Processed {count} items.")
 
 # Save the processed data to a new json file
 with open("train_MDP_tree.json", "w") as f:

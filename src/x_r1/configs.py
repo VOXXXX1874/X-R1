@@ -111,10 +111,6 @@ class GRPOScriptArguments(ScriptArguments):
         default=None,
         metadata={"help": "Quick evaluation dataset"},
     )
-    critical_value_reward: bool = field(
-        default=False,
-        metadata={"help": "Use critical value reward"},
-    )
 
 
 @dataclass

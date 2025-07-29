@@ -106,7 +106,7 @@ def print_prompt_completions_sample(prompts: list[str], completions: list[str], 
     panel = Panel(table, expand=False, title=f"Step {step}", border_style="bold white")
     console.print(panel)
 
-class XGRPOTrainer(GRPOTrainer):
+class XGRPOTrainerMDP(GRPOTrainer):
     # base trl GRPO_trainer
 
 
@@ -157,6 +157,7 @@ class XGRPOTrainer(GRPOTrainer):
         self.cv_type = args.cv_type
         # Determine whether to use tag in response
         self.tag = args.tag
+        # TODO: Read and parse the MDP tree according to the question ID.
 
     def _generate_and_score_completions(self, inputs: dict[str, Union[torch.Tensor, Any]]) -> dict[str, Union[torch.Tensor, Any]]:
         device = self.accelerator.device
@@ -222,6 +223,7 @@ class XGRPOTrainer(GRPOTrainer):
                     self.run_quick_eval = False
 
                 ordered_set_of_prompts = list(dict.fromkeys(all_prompts_text))
+                # TODO: Modify the generate number, merge the generated output into MDP tree, sample the output according to the MDP tree, and assign different advantage for different part of answer
                 outputs = self.llm.generate(
                     ordered_set_of_prompts, sampling_params=self.sampling_params, use_tqdm=False
                 )
@@ -328,6 +330,7 @@ class XGRPOTrainer(GRPOTrainer):
                     completion_mask_adjustment = steps_final_pos
                 rewards_per_func[:, i] = torch.tensor(output_reward_func, dtype=torch.float32, device=device)
 
+        # TODO: Remove the GRPO advantage calculation
         # Gather the reward per function: this part is crucial, because the rewards are normalized per group and the
         # completions may be distributed across processes
         rewards_per_func = gather(rewards_per_func)
@@ -355,7 +358,7 @@ class XGRPOTrainer(GRPOTrainer):
             (self.accelerator.process_index + 1) * len(prompts),
         )
         advantages = advantages[process_slice]
-
+        # TODO: adjust it or delete it
         # Adjust the completion mask if needed
         if self.part_of_gradient:
             for i in range(len(completion_mask_adjustment)):
@@ -414,7 +417,7 @@ class XGRPOTrainer(GRPOTrainer):
                     }
                     df = pd.DataFrame(table)
                     wandb.log({"completions": wandb.Table(dataframe=df)})
-
+        # TODO: Modify the return advantages and corresponding calculation in compute_loss()
         return {
             "prompt_ids": prompt_ids,
             "prompt_mask": prompt_mask,

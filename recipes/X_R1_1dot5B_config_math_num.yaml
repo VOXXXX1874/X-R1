@@ -9,7 +9,7 @@ torch_dtype: bfloat16
 attn_implementation: flash_attention_2
 
 # Data training arguments
-dataset_name: src/cv_extraction/XR1-hard/noised_012
+dataset_name: src/cv_extraction/XR1-hard/noised_025
 dataset_configs:
 - train
 num_processes: 4

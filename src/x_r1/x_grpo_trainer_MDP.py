@@ -50,6 +50,8 @@ if is_wandb_available():
 
 import random
 
+from utils.MDP import *
+
 
 # What we call a reward function is a callable that takes a list of prompts and completions and returns a list of
 # rewards. When it's a string, it's a model ID, so it's loaded as a pretrained model.

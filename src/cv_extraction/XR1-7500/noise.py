@@ -7,7 +7,7 @@ with open("aug_ext_exp_num_tt_012/train.json", "r") as file:
     data = json.load(file)
 
 # noise level
-noise_level = 0.12 # 0.12/0.25/0.5/1.0
+noise_level = 0.25 # 0.12/0.25/0.5/1.0
 # noised dataset
 noised_data = []
 

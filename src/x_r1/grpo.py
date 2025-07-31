@@ -39,6 +39,7 @@ from utils.wandb_logging import init_wandb_training
 from x_grpo_trainer import XGRPOTrainer
 from x_grpo_plus_trainer import XGRPOPlusTrainer
 from x_grpo_supervised_trainer import XGRPOSupervisedTrainer
+from x_grpo_trainer_MDP import XGRPOTrainerMDP
 from trl import ModelConfig, TrlParser, get_peft_config
 from peft import LoraConfig, PeftModel, get_peft_model
 
@@ -153,6 +154,23 @@ def main(script_args, training_args, model_args):
         trainer = XGRPOSupervisedTrainer(
             model=model_args.model_name_or_path,
             reference_model=script_args.reference_model,
+            # model = model,
+            reward_funcs=reward_funcs,
+            args=training_args,
+            train_dataset=dataset[script_args.dataset_train_split],
+            eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
+            peft_config=get_peft_config(model_args), # LoRA parameter
+            callbacks=get_callbacks(training_args, model_args),
+            quick_eval_dataset=quick_eval_dataset if script_args.quick_eval_dataset else None,
+        )
+    elif script_args.trainer_type == "XGRPOTrainerMDP":
+        # Test if the dataset contains "MDP_tree" field
+        if "MDP_tree" not in dataset[script_args.dataset_train_split][0]:
+            raise ValueError("The dataset does not contain 'MDP_tree' field. Please check your dataset.")
+        else:
+            logger.info("The dataset contains 'MDP_tree' field. Proceeding with XGRPOTrainerMDP.")
+        trainer = XGRPOTrainer(
+            model=model_args.model_name_or_path,
             # model = model,
             reward_funcs=reward_funcs,
             args=training_args,

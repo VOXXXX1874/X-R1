@@ -1,5 +1,3 @@
-# Import libraries to read json files and manipulate data
-import json
 # regular expression library for pattern matching
 import re
 from math_verify import LatexExtractionConfig
@@ -251,6 +249,92 @@ class MDP_tree:
         dfs(self.root_node)
         # Reset the "value_updated" flag for all nodes
         reset_value_updated_flag_bfs(self.root_node)
+
+def MDP_tree_from_string(
+        str_representation: str,
+):
+    """
+    Parses a string representation of an MDP_tree and returns an MDP_tree object.
+    The string should be in the format returned by the __repr__ method of MDP_tree.
+    """
+    # Extract the content within MDP_tree(...)
+    content_match = re.search(r'MDP_tree\((.*)\)', str_representation, re.DOTALL)
+    if not content_match:
+        return None
+    content = content_match.group(1)
+
+    # Regex to parse each number_node
+    node_pattern = re.compile(r"number_node\(index=(?P<index>\d+), existing_numbers=(?P<existing_numbers>set\(\)|{.*?}), new_number=(?P<new_number>\w+), links=\[(?P<links>.*?)\], state_value=(?P<state_value>[-.\d]+)\)")
+    
+    nodes_data = []
+    for match in node_pattern.finditer(content):
+        nodes_data.append(match.groupdict())
+
+    if not nodes_data:
+        return None
+
+    # Create all nodes first and store them in a dictionary indexed by their ID
+    nodes = {}
+    for data in nodes_data:
+        index = int(data['index'])
+        
+        # Parse existing_numbers
+        existing_numbers_str = data['existing_numbers']
+        if existing_numbers_str == 'set()':
+            existing_numbers = set()
+        else:
+            # From "{1, 2, 3}" to set({1, 2, 3})
+            existing_numbers = set(map(int, existing_numbers_str.strip('{}').split(','))) if existing_numbers_str != '{}' else set()
+
+        # Parse new_number
+        new_number_str = data['new_number']
+        new_number = int(new_number_str) if new_number_str != 'None' else None
+        
+        node = number_node(existing_numbers=existing_numbers, new_number=new_number, index=index)
+        node.state_value = float(data['state_value'])
+        nodes[index] = node
+
+    # Now, establish the links
+    for data in nodes_data:
+        index = int(data['index'])
+        current_node = nodes[index]
+        
+        links_str = data['links']
+        if links_str:
+            link_pattern = re.compile(r"{'node': (\d+), 'num_pass': '(\d+)'}")
+            for link_match in link_pattern.finditer(links_str):
+                target_node_index = int(link_match.group(1))
+                num_pass = int(link_match.group(2))
+                if target_node_index in nodes:
+                    target_node = nodes[target_node_index]
+                    current_node.links.append({'node': target_node, 'num_pass': num_pass})
+
+    # Reconstruct the MDP_tree object
+    # The root node is assumed to be the one with index 0
+    if 0 not in nodes:
+        return None # Or handle error appropriately
+        
+    root_node = nodes[0]
+    
+    # Create a dummy MDP_tree and then populate it
+    # The constructor of MDP_tree requires expression_list, which we don't have.
+    # So we create a dummy one and then replace its properties.
+    mdp_tree = MDP_tree([], 0) 
+    mdp_tree.root_node = root_node
+    
+    # Find correct and wrong states
+    # A state is considered final if it has no outgoing links.
+    # Correct state has value > 0.5, wrong state has value < 0.5
+    for node in nodes.values():
+        if not node.links:
+            if node.state_value >= 0.5:
+                mdp_tree.correct_state = node
+            else:
+                mdp_tree.wrong_state = node
+
+    mdp_tree.node_count = len(nodes)
+    
+    return mdp_tree
         
 def number_parse(
     pred: str,
@@ -328,75 +412,3 @@ def extract_target_from_pred(
         predictions_end_pos.append(end_position)
 
     return extracted_predictions, predictions_end_pos
-
-## Test the MDP tree with a simple example
-## Construct the MDP tree with the response
-#states, positions = thinking_parse(
-#            "To solve the given problem, we start with the equation:\n\n\\[\n\\frac{a}{25-a} + \\frac{b}{65-b} + \\frac{c}{60-c} = 7\n\\]\n\nWe need to evaluate the expression:\n\n\\[\n\\frac{5}{25-a} + \\frac{13}{65-b} + \\frac{12}{60-c}\n\\]\n\nFirst, let's make a substitution to simplify the problem. Let \\( x = 25 - a \\). Then, \\( a = 25 - x \\). Similarly, let \\( y = 65 - b \\), so \\( b = 65 - y \\), and let \\( z = 60 - c \\), so \\( c = 60 - z \\). Substituting these into the original equation, we get:\n\n\\[\n\\frac{a}{25-a} + \\frac{b}{65-b} + \\frac{c}{60-c} = \\frac{25-x}{x} + \\frac{65-y}{y} + \\frac{60-z}{z} = 7\n\\]\n\nThis can be rewritten as:\n\n\\[\n\\frac{25}{x} - 1 + \\frac{65}{y} - 1 + \\frac{60}{z} - 1 = 7\n\\]\n\nSimplifying the left side, we get:\n\n\\[\n\\frac{25}{x} + \\frac{65}{y} + \\frac{60}{z} - 3 = 7\n\\]\n\nAdding 3 to both sides, we obtain:\n\n\\[\n\\frac{25}{x} + \\frac{65}{y} + \\frac{60}{z} = 10\n\\]\n\nNow, we need to find the value of:\n\n\\[\n\\frac{5}{25-a} + \\frac{13}{65-b} + \\frac{12}{60-c}\n\\]\n\nSubstituting back \\( x = 25 - a \\), \\( y = 65 - b \\), and \\( z = 60 - c \\), we get:\n\n\\[\n\\frac{5}{x} + \\frac{13}{y} + \\frac{12}{z}\n\\]\n\nSince we already know that:\n\n\\[\n\\frac{25}{x} + \\frac{65}{y} + \\frac{60}{z} = 10\n\\]\n\nWe can conclude that:\n\n\\[\n\\frac{5}{x} + \\frac{13}{y} + \\frac{12}{z} = \\frac{1}{2} \\left( \\frac{25}{x} + \\frac{65}{y} + \\frac{60}{z} \\right) = \\frac{1}{2} \\times 10 = 5\n\\]\n\nTherefore, the value of the expression is:\n\n\\[\n\\boxed{5}\n\\]",
-#            extraction_config=[LatexExtractionConfig()],
-#        )
-#mdp_tree = MDP_tree(states, 0)
-## Update the MDP tree with new response
-#states, positions = thinking_parse(
-#            "To solve the given problem, we need to evaluate the expression \\(\\frac{5}{25-a} + \\frac{13}{65-b} + \\frac{12}{60-c}\\) given that \\(\\frac{a}{25-a} + \\frac{b}{65-b} + \\frac{c}{60-c} = 7\\). Let's denote \\(x = \\frac{a}{25-a}\\), \\(y = \\frac{b}{65-b}\\), and \\(z = \\frac{c}{60-c}\\). Then we have:\n\n\\[x + y + z = 7.\\]\n\nWe need to find the value of \\(5x + 13y + 12z\\). To do this, we can use the fact that \\(y = \\frac{1}{x^*}\\) and \\(z = \\frac{1}{x^* - 1}\\) where \\(x^*\\) is the value of the expression \\(\\frac{25-a}{a}\\) when \\(a = \\frac{1}{x}\\).\n\nFirst, let's express \\(y\\) and \\(z\\) in a different form. Notice that:\n\n\\[y = \\frac{1}{x^*} = \\frac{1}{\\frac{25-a}{a}} = \\frac{a}{25-a},\\]\n\\[z = \\frac{1}{x^* - 1} = \\frac{1}{\\frac{25-a}{a} - 1} = \\frac{1}{\\frac{25-a-a}{a}} = \\frac{a}{25-2a}.\\]\n\nNow, let's substitute \\(x = \\frac{a}{25-a}\\), \\(y = \\frac{b}{65-b}\\), and \\(z = \\frac{c}{60-c}\\) into the expression we need to evaluate:\n\n\\[5x + 13y + 12z = 5 \\left(\\frac{a}{25-a}\\right) + 13 \\left(\\frac{b}{65-b}\\right) + 12 \\left(\\frac{c}{60-c}\\right).\\]\n\nFrom the given condition, we know that \\(\\frac{a}{25-a} + \\frac{b}{65-b} + \\frac{c}{60-c} = 7\\). We can use this to help us find the value of the expression \\(5 \\left(\\frac{a}{25-a}\\right) + 13 \\left(\\frac{b}{65-b}\\right) + 12 \\left(\\frac{c}{60-c}\\right)\\).\n\nNotice that:\n\n\\[5 \\left(\\frac{a}{25-a}\\right) + 13 \\left(\\frac{b}{65-b}\\right) + 12 \\left(\\frac{c}{60-c}\\right) = 5 \\left(\\frac{1}{7-1} + \\frac{1}{65-63} + \\frac{1}{60-59}\\right) + 13 \\left(\\frac{1}{7-1} + \\frac{1}{65-63} + \\frac{1}{60-59}\\right).\\]\n\nSince \\(\\frac{a}{25-a} + \\frac{b}{65-b} + \\frac{c}{60-c} = 7\\), the expression simplifies to:\n\n\\[5 \\left(\\frac{1}{6} + \\frac{1}{2} + 1\\right) + 13 \\left(\\frac{1}{6} + \\frac{1}{2} + 1\\right) = 7 \\left(\\frac{1}{6} + \\frac{1}{2} + 1\\right) = 7 \\left(\\frac{1 + 3 + 6}{6}\\right) = 7 \\left(\\frac{10}{6}\\right) = 7 \\left(\\frac{5}{3}\\right) = \\frac{35}{3}.\\]\n\nThus, the value of the expression is:\n\n\\[\n\\boxed{\\frac{35}{3}}.\n\\]",
-#            extraction_config=[LatexExtractionConfig()],
-#        )
-## Update the MDP tree with the new response
-#mdp_tree.update(states, 0)
-## Print the MDP tree to see the structure
-#mdp_tree.trim()  # Optional: trim the tree to remove branches leading to wrong state
-#print(mdp_tree)
-#exit()
-
-# Read the json file train.json
-with open("XR1-hard/extend600/train.json", "r") as f:
-    math_qa_dataset = json.load(f)
-
-# Initialize an empty list to store the processed data
-MDP_tree_math_qa_dataset = []
-count = 0
-problem_id = 0
-# Iterate through each item in the dataset
-for item in math_qa_dataset:
-    # Extract the solution, correct_responses, and wrong_responses
-    solution = item.get("solution", "")
-    correct_responses = item.pop("correct_responses", [])
-    wrong_responses = item.pop("wrong_responses", [])
-    # Create a new MDP_tree for the solution
-    solution_states, solution_positions = thinking_parse(
-        solution,
-        extraction_config=[LatexExtractionConfig()],
-    )
-    problem_mdp_tree = MDP_tree(solution_states, 1)
-    # Update this MDP_tree with correct responses
-    for correct_response in correct_responses:
-        correct_states, correct_positions = thinking_parse(
-            correct_response,
-            extraction_config=[LatexExtractionConfig()],
-        )
-        problem_mdp_tree.update(correct_states, 1)
-    # Update this MDP_tree with wrong responses
-    for wrong_response in wrong_responses:
-        wrong_states, wrong_positions = thinking_parse(
-            wrong_response,
-            extraction_config=[LatexExtractionConfig()],
-        )
-        problem_mdp_tree.update(wrong_states, 0)
-    # Trim the MDP tree if it is too large
-    if len(problem_mdp_tree) > 100:
-        problem_mdp_tree.trim()
-    # Update the node values in the MDP tree
-    problem_mdp_tree.update_node_value()
-    # Store the MDP tree 
-    item["MDP_tree"] = problem_mdp_tree.__repr__()
-    item['id'] = problem_id
-    problem_id += 1
-    # Add the MDP tree to MDP_tree_math_qa_dataset
-    MDP_tree_math_qa_dataset.append(item)
-    count += 1
-    print(f"Processed {count} items.")
-
-# Save the processed data to a new json file
-with open("train_MDP_tree.json", "w") as f:
-    json.dump(MDP_tree_math_qa_dataset, f, indent=4)
-    

@@ -1,66 +1,43 @@
-# This is X-R1(https://github.com/dhcode-cpp/X-R1) project training config:
-# required >=  1x3090(24G)/4090(24G)
-# running time 2~3h
-
 # Model arguments
-model_name_or_path: Qwen/Qwen2.5-0.5B-instruct
+model_name_or_path: Qwen/Qwen2.5-0.5B-Instruct
 model_revision: main
 torch_dtype: bfloat16
 attn_implementation: flash_attention_2
 
 # Data training arguments
-dataset_name: src/cv_extraction/XR1-hard/MDP_extend_20/train.json
-dataset_configs:
-- train
+dataset_name: open-r1/OpenR1-Math-220k
 num_processes: 2
 
-# GRPO trainer config
-trainer_type: "XGRPOTrainer"
-reward_funcs: ['accuracy', 'thinking', 'format']
-#reward_funcs: ['accuracy', 'thinking', 'accuracy_thinking', 'format']
-reward_weights: [1.0, 0.3, 1.0]
-#reward_weights: [1.0, 0.0, 1.0]
-#reward_weights: [0.0, 0.0, 1.0, 1.0]
-# part_of_gradient: True
-part_of_gradient: False
-#beta: 0.04
-cv_type: "num"
-tag: True
-temperature: 0.7
-quick_eval_dataset: src/cv_extraction/MATH-500/exp_num_tt_012
+# SFT trainer config
 bf16: true
-use_vllm: true
-vllm_device: auto
-vllm_gpu_memory_utilization: 0.7
 do_eval: false
-eval_strategy: "no"
-eval_steps: 10
+eval_strategy: 'no'
 gradient_accumulation_steps: 8
 gradient_checkpointing: true
 gradient_checkpointing_kwargs:
   use_reentrant: false
-learning_rate: 1.0e-06
-log_completions: true
+learning_rate: 2.0e-05
 log_level: info
 logging_steps: 1
 logging_strategy: steps
-lr_scheduler_type: cosine
-max_prompt_length: 256
-num_generations: 6
-num_iterations: 4   
-max_completion_length: 1024
+lr_scheduler_type: cosine_with_min_lr
+lr_scheduler_kwargs:
+  min_lr_rate: 0.1
+packing: false
+max_length: 4096
 max_steps: -1
-num_train_epochs: 50
-output_dir: output/X-R1-1.5B
-#output_dir: output/X-R1-1.5B-1
+num_train_epochs: 1
+output_dir: data/Qwen2.5-0.5B-Distill
 overwrite_output_dir: true
 per_device_eval_batch_size: 1
-per_device_train_batch_size: 3
+per_device_train_batch_size: 2
 push_to_hub: False
 report_to:
 - wandb
-save_strategy: "epoch"
+save_strategy: "steps"
+save_steps: 100
+save_total_limit: 1
 seed: 42
-warmup_ratio: 0.1
 use_liger: true
 use_liger_kernel: true
+warmup_ratio: 0.05

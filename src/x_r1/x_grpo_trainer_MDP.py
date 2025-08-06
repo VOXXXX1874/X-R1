@@ -33,6 +33,7 @@ from transformers import (
 )
 from transformers.utils import is_peft_available
 from trl.trainer import GRPOTrainer
+from trl.extras.profiling import profiling_decorator
 from trl.data_utils import apply_chat_template, is_conversational, maybe_apply_chat_template
 from trl.models import create_reference_model, prepare_deepspeed, unwrap_model_for_generation
 from trl.import_utils import is_vllm_available
@@ -128,6 +129,11 @@ class XGRPOTrainerMDP(GRPOTrainer):
         peft_config: Optional["PeftConfig"] = None,
         quick_eval_dataset: Optional[Union[Dataset, IterableDataset]] = None,
     ):
+        # Read and parse the MDP tree according to the question ID.
+        self.tree_dict = {}
+        for item in train_dataset:
+            self.tree_dict[item['id']] = MDP_tree_from_string(item['MDP_tree'])
+
         GRPOTrainer.__init__(
             self,
             model=model,
@@ -152,17 +158,57 @@ class XGRPOTrainerMDP(GRPOTrainer):
             self.run_quick_eval = False
         else:
             self.quick_eval_dataset = None
-
-        # how to apply gradient
-        self.part_of_gradient = args.part_of_gradient
-        # Assign the reward type
-        self.cv_type = args.cv_type
+        # Modify the sampling parameters
+        if args.extra_generations > 0:
+            self.sampling_params = SamplingParams(
+                    temperature=args.temperature,
+                    max_tokens=self.max_completion_length,
+                    guided_decoding=None,
+                    n=args.extra_generations,
+                )
         # Determine whether to use tag in response
         self.tag = args.tag
-        # TODO: Read and parse the MDP tree according to the question ID.
+        # Determine number of questions per step
+        self.num_questions_per_step = self.args.per_device_train_batch_size * self.accelerator.num_processes // self.num_generations
+        if self.num_questions_per_step * args.extra_generations % self.accelerator.num_processes != 0:
+            raise ValueError(
+                f"Number of prompts ({self.num_questions_per_step}) times extra generations ({args.extra_generations}) "
+                f"must be divisible by the number of processes ({self.accelerator.num_processes})."
+            )
+        if self.num_questions_per_step > self.accelerator.num_processes:
+            raise ValueError(
+                f"Number of questions ({self.num_questions_per_step}) per step must be less than or equal to the number of processes ({self.accelerator.num_processes})."
+            )
+        if args.extra_generations % self.num_generations != 0:
+            raise ValueError(
+                f"Number of extra generations ({args.extra_generations}) must be divisible by the number of generations ({self.num_generations})."
+            )
+
+    @profiling_decorator
+    def _prepare_inputs(self, inputs: dict[str, Union[torch.Tensor, Any]]) -> dict[str, Union[torch.Tensor, Any]]:
+        mode = "eval" if self.control.should_evaluate else "train"
+        if mode == "train":
+            if self.state.global_step % self.num_iterations == 0:
+                inputs = self._generate_and_score_completions(inputs)
+                self._buffered_inputs[self._step % self.args.gradient_accumulation_steps] = inputs
+            else:
+                inputs = self._buffered_inputs[self._step % self.args.gradient_accumulation_steps]
+            self._step += 1
+        else:
+            # In evaluation, we don't reuse completions across multiple updates, so we don't need to buffer inputs.
+            inputs = self._generate_and_score_completions(inputs)
+        # Sample index uniformly
+        indices = torch.multinomial(torch.ones((inputs['advantages_list'].size()[0],)), num_samples=self.args.per_device_train_batch_size, replacement=False)
+        # Select the inputs based on the sampled indices
+        inputs = {
+            key: value[indices] if isinstance(value, torch.Tensor) else [value[i] for i in indices]
+            for key, value in inputs.items()
+        }
+        return inputs
 
     def _generate_and_score_completions(self, inputs: dict[str, Union[torch.Tensor, Any]]) -> dict[str, Union[torch.Tensor, Any]]:
         device = self.accelerator.device
+        inputs = inputs * (self.args.extra_generations // self.num_generations)
         prompts = [x["prompt"] for x in inputs]
         prompts_text = [maybe_apply_chat_template(example, self.processing_class)["prompt"] for example in inputs]
         prompt_inputs = self.processing_class(
@@ -218,14 +264,14 @@ class XGRPOTrainerMDP(GRPOTrainer):
                             # FIXME: Compatible with different train and eval dataset
                             keys = [key for key in self.quick_eval_dataset[0] if key not in ["prompt", "completion"]]
                             reward_kwargs = {key: [example[key] for example in self.quick_eval_dataset] for key in keys}
-                            output_reward_func, steps_final_pos = reward_func(completions=quick_eval_completions, tag = self.tag, cv_type = self.cv_type, silence = True, **reward_kwargs)
+                            output_reward_func, steps_final_pos = reward_func(completions=quick_eval_completions, tag = self.tag, silence = True, **reward_kwargs)
                             quick_eval_rewards[:, i] = torch.tensor(output_reward_func, dtype=torch.float32, device=device)
                             # write the reward to the metrics
                             self._metrics['train'][f"quick_eval_rewards/{reward_func.__name__}"].append(quick_eval_rewards[:, i].mean().item())
                     self.run_quick_eval = False
 
                 ordered_set_of_prompts = list(dict.fromkeys(all_prompts_text))
-                # TODO: Modify the generate number, merge the generated output into MDP tree, sample the output according to the MDP tree, and assign different advantage for different part of answer
+                
                 outputs = self.llm.generate(
                     ordered_set_of_prompts, sampling_params=self.sampling_params, use_tqdm=False
                 )
@@ -236,9 +282,11 @@ class XGRPOTrainerMDP(GRPOTrainer):
             # Broadcast the completions from the main process to all processes, ensuring each process receives its
             # corresponding slice.
             completion_ids = broadcast_object_list(completion_ids, from_process=0)
+            # With extra generations, we need to slice the completions to match the actual number of generations.
+            per_process_partition = self.num_questions_per_step * self.args.extra_generations // self.accelerator.num_processes
             process_slice = slice(
-                self.accelerator.process_index * len(prompts),
-                (self.accelerator.process_index + 1) * len(prompts),
+                self.accelerator.process_index * per_process_partition,
+                (self.accelerator.process_index + 1) * per_process_partition,
             )
             completion_ids = completion_ids[process_slice]
 
@@ -249,18 +297,9 @@ class XGRPOTrainerMDP(GRPOTrainer):
             prompt_mask = prompt_mask.to(device)
             prompt_completion_ids = torch.cat([prompt_ids, completion_ids], dim=1)
         else:
-            # Regular generation path
-            prompt_ids = prompt_ids.to(device)
-            prompt_mask = prompt_mask.to(device)
-            with unwrap_model_for_generation(self.model, self.accelerator) as unwrapped_model:
-                prompt_completion_ids = unwrapped_model.generate(
-                    prompt_ids, attention_mask=prompt_mask, generation_config=self.generation_config
-                )
-
-            # Compute prompt length and extract completion ids
-            prompt_length = prompt_ids.size(1)
-            prompt_ids = prompt_completion_ids[:, :prompt_length]
-            completion_ids = prompt_completion_ids[:, prompt_length:]
+            raise ValueError(
+                "Only vLLM is supported for now. Please set `args.use_vllm` to `True`."
+            )
 
         # Mask everything after the first EOS token
         is_eos = completion_ids == self.processing_class.eos_token_id
@@ -278,23 +317,22 @@ class XGRPOTrainerMDP(GRPOTrainer):
             # When using num_iterations == 1, old_per_token_logps == per_token_logps, so we can skip it's
             # computation here, and use per_token_logps.detach() instead.
             if self.num_iterations > 1:
-                old_per_token_logps = self._get_per_token_logps(
-                    self.model, prompt_completion_ids, attention_mask, logits_to_keep
-                )
+                # Because there are extra generations, we need to divide prompt_completion_ids into batches
+                # to avoid OOM. 
+                old_per_token_logps = []
+                batch_size = self.args.per_device_train_batch_size * self.accelerator.num_processes
+                for i in range(0, prompt_completion_ids.size(0), batch_size):
+                    batch_prompt_completion_ids = prompt_completion_ids[i : i + batch_size]
+                    batch_attention_mask = attention_mask[i : i + batch_size]
+                    batch_old_per_token_logps = self._get_per_token_logps(
+                        self.model, batch_prompt_completion_ids, batch_attention_mask, logits_to_keep
+                    )
+                    old_per_token_logps.append(batch_old_per_token_logps)
+                old_per_token_logps = torch.cat(old_per_token_logps, dim=0)
+                # Move to device
+                old_per_token_logps = old_per_token_logps.to(device)
             else:
                 old_per_token_logps = None
-
-            if self.beta == 0.0:
-                ref_per_token_logps = None
-            elif self.ref_model is not None:
-                ref_per_token_logps = self._get_per_token_logps(
-                    self.ref_model, prompt_completion_ids, attention_mask, logits_to_keep
-                )
-            else:
-                with self.accelerator.unwrap_model(self.model).disable_adapter():
-                    ref_per_token_logps = self._get_per_token_logps(
-                        self.model, prompt_completion_ids, attention_mask, logits_to_keep
-                    )
 
         # Decode the generated completions
         completions_text = self.processing_class.batch_decode(completion_ids, skip_special_tokens=True)
@@ -307,7 +345,6 @@ class XGRPOTrainerMDP(GRPOTrainer):
             completions = completions_text
 
         rewards_per_func = torch.zeros(len(prompts), len(self.reward_funcs), device=device)
-        completion_mask_adjustment = []
         for i, (reward_func, reward_processing_class) in enumerate(
             zip(self.reward_funcs, self.reward_processing_classes)
         ):
@@ -327,56 +364,57 @@ class XGRPOTrainerMDP(GRPOTrainer):
                 # Repeat all input columns (but "prompt" and "completion") to match the number of generations
                 keys = [key for key in inputs[0] if key not in ["prompt", "completion"]]
                 reward_kwargs = {key: [example[key] for example in inputs] for key in keys}
-                output_reward_func, steps_final_pos = reward_func(completions=completions, tag = self.tag, cv_type = self.cv_type, **reward_kwargs)
-                if len(steps_final_pos) > 0 and self.part_of_gradient:
-                    completion_mask_adjustment = steps_final_pos
+                output_reward_func, _ = reward_func(completions=completions, tag = self.tag, **reward_kwargs)
                 rewards_per_func[:, i] = torch.tensor(output_reward_func, dtype=torch.float32, device=device)
 
-        # TODO: Remove the GRPO advantage calculation
-        # Gather the reward per function: this part is crucial, because the rewards are normalized per group and the
-        # completions may be distributed across processes
-        rewards_per_func = gather(rewards_per_func)
-
-        # Apply weights to each reward function's output and sum
-        rewards = (rewards_per_func * self.reward_weights.to(device).unsqueeze(0)).sum(dim=1)
-        # print('x_grpo_rewars output:',rewards)
-
-        # Compute grouped-wise rewards
-        mean_grouped_rewards = rewards.view(-1, self.num_generations).mean(dim=1)
-        std_grouped_rewards = rewards.view(-1, self.num_generations).std(dim=1)
-
-        # Normalize the rewards to compute the advantages
-        mean_grouped_rewards = mean_grouped_rewards.repeat_interleave(self.num_generations, dim=0)
-        std_grouped_rewards = std_grouped_rewards.repeat_interleave(self.num_generations, dim=0)
-        advantages = (rewards - mean_grouped_rewards) / (std_grouped_rewards + 1e-4)
-
-        print('advantage:', advantages)
-        print('completion_mask:', completion_mask, "sum:", [completion_mask[i].sum() for i in range(len(completion_mask))])
-        print('completion_mask_adjustment:', completion_mask_adjustment)
-
-        # Slice to keep only the local part of the data
-        process_slice = slice(
-            self.accelerator.process_index * len(prompts),
-            (self.accelerator.process_index + 1) * len(prompts),
-        )
-        advantages = advantages[process_slice]
-        # TODO: adjust it or delete it
-        # Adjust the completion mask if needed
-        if self.part_of_gradient:
-            for i in range(len(completion_mask_adjustment)):
-                if completion_mask_adjustment[i] != 0 and advantages[i] < 0:
-                    text = completions_text[i]
-                    char_pos = completion_mask_adjustment[i]
-                    # Re-tokenize
-                    encoding = self.processing_class(text, return_offsets_mapping=True, add_special_tokens=False)
-                    offsets = encoding["offset_mapping"]
-                    target_token_idx = -1
-                    for token_idx, (start, end) in enumerate(offsets):
-                        # Find the first token that *ends* after the target character position.
-                        if end > char_pos:
-                            target_token_idx = token_idx
-                            break
-                    completion_mask[i, :target_token_idx + 1] = 0
+        if self.tag:
+            # TODO: Think of a method to deal with format rewards
+            raise ValueError(
+                "Current implementation is not compatible with the format reward function. Please set `tag=False` in the config."
+            )
+        else:
+            # If no tag, we can parse the completions_text and use reward directly
+            question_id = inputs[0]["id"]
+            expressions_rewards_pair = []
+            for i, completion in enumerate(completions_text):
+                # Extract the number from the expressions in completions text
+                expressions, positions = thinking_parse(
+                    completion,
+                    extraction_config=[LatexExtractionConfig()],
+                )
+                # Convert the character positions to token positions
+                # Re-tokenize and get the offsets_mapping
+                encoding = self.processing_class(completion, return_offsets_mapping=True, add_special_tokens=False)
+                offsets = encoding["offset_mapping"]
+                position_pointer = 0
+                for token_idx, (_, end) in enumerate(offsets):
+                    # Find the corresponding character position in the completion
+                    while position_pointer < len(positions) -1 and positions[position_pointer] < end:
+                        positions[position_pointer] = token_idx
+                        position_pointer += 1
+                expressions_rewards_pair.append((question_id, expressions, positions, rewards_per_func[i][0].item()))
+            # Gather the expressions_rewards_pair and update the MDP tree
+            all_expressions_rewards_pair = gather_object(expressions_rewards_pair)
+            past_id = -1
+            for i, (id, expressions, positions, reward) in enumerate(all_expressions_rewards_pair):
+                if id != past_id:
+                    self.tree_dict[id].bfs_decay(self.args.delta)
+                    past_id = id
+                if id not in self.tree_dict:
+                    raise ValueError(f"Question ID {id} not found in the MDP tree.")
+                # Update the MDP tree with the new reward
+                self.tree_dict[id].update(expressions, reward)
+            # Update the state value in the MDP tree
+            self.tree_dict[question_id].update_node_value()
+            # According to the updated MDP tree, allocate the advantages and calculate the probability for each generation
+            advantages_list = []
+            for expressions_reward in expressions_rewards_pair:
+                id, expressions, positions, reward = expressions_reward
+                advantages= self.tree_dict[id].advantages(
+                    expressions, positions, completion_ids.size(1), final_reward=reward
+                )
+                # The length of advantages already matches the generation length
+                advantages_list.append(advantages)
 
         # Log the metrics
         mode = "eval" if self.control.should_evaluate else "train"
@@ -392,13 +430,18 @@ class XGRPOTrainerMDP(GRPOTrainer):
                 reward_func_name = reward_func.__name__
             self._metrics[mode][f"rewards/{reward_func_name}"].append(reward_per_func[i].item())
 
-        self._metrics[mode]["reward"].append(rewards.mean().item())
-        self._metrics[mode]["reward_std"].append(std_grouped_rewards.mean().item())
-
         if self.log_completions and self.state.global_step % self.args.logging_steps == 0:
             prompts_to_log = gather_object(prompts_text)
             completions_to_log = gather_object(completions_text)
+            rewards_per_func = gather(rewards_per_func)
+            rewards = (rewards_per_func * self.reward_weights.to(device).unsqueeze(0)).sum(dim=1)
             rewards_to_log = rewards.tolist()
+            # Sample a few prompts and completions to log
+            if len(prompts_to_log) > 10:
+                sample_indices = random.sample(range(len(prompts_to_log)), 10)
+                prompts_to_log = [prompts_to_log[i] for i in sample_indices]
+                completions_to_log = [completions_to_log[i] for i in sample_indices]
+                rewards_to_log = [rewards_to_log[i] for i in sample_indices]
 
             if self.accelerator.is_main_process:
                 print_prompt_completions_sample(
@@ -407,25 +450,86 @@ class XGRPOTrainerMDP(GRPOTrainer):
                     rewards_to_log,
                     self.state.global_step,
                 )
-                if self.args.report_to and "wandb" in self.args.report_to and wandb.run is not None:
-                    import pandas as pd
+                #if self.args.report_to and "wandb" in self.args.report_to and wandb.run is not None:
+                #    import pandas as pd
+                #
+                #    # For logging
+                #    table = {
+                #        "step": [str(self.state.global_step)] * len(rewards),
+                #        "prompt": prompts_to_log,
+                #        "completion": completions_to_log,
+                #        "reward": rewards.tolist(),
+                #    }
+                #    df = pd.DataFrame(table)
+                #    wandb.log({"completions": wandb.Table(dataframe=df)})
 
-                    # For logging
-                    table = {
-                        "step": [str(self.state.global_step)] * len(rewards),
-                        "prompt": prompts_to_log,
-                        "completion": completions_to_log,
-                        "reward": rewards.tolist(),
-                    }
-                    df = pd.DataFrame(table)
-                    wandb.log({"completions": wandb.Table(dataframe=df)})
-        # TODO: Modify the return advantages and corresponding calculation in compute_loss()
+        # Return the advantages and probability for each generation
         return {
             "prompt_ids": prompt_ids,
             "prompt_mask": prompt_mask,
             "completion_ids": completion_ids,
             "completion_mask": completion_mask,
             "old_per_token_logps": old_per_token_logps,
-            "ref_per_token_logps": ref_per_token_logps,
-            "advantages": advantages,
+            "advantages_list": torch.tensor(advantages_list, device=device, dtype=torch.bfloat16),
         }
+    
+    @profiling_decorator
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        if return_outputs:
+            raise ValueError("The GRPOTrainer does not support returning outputs")
+
+        prompt_ids, prompt_mask = inputs["prompt_ids"], inputs["prompt_mask"]
+        completion_ids, completion_mask = inputs["completion_ids"], inputs["completion_mask"]
+        input_ids = torch.cat([prompt_ids, completion_ids], dim=1)
+        attention_mask = torch.cat([prompt_mask, completion_mask], dim=1)
+        prompt_completion_ids = torch.cat([prompt_ids, completion_ids], dim=1)
+        logits_to_keep = completion_ids.size(1)  # we only need to compute the logits for the completion tokens
+
+        per_token_logps = self._get_per_token_logps(model, input_ids, attention_mask, logits_to_keep)
+
+        # Compute the per-token log probabilities for the reference model
+        with torch.no_grad():
+            # Because there is extra generations, the reference model is moved here to save computation.
+            if self.beta == 0.0:
+                ref_per_token_logps = None
+            elif self.ref_model is not None:
+                ref_per_token_logps = self._get_per_token_logps(
+                    self.ref_model, prompt_completion_ids, attention_mask, logits_to_keep
+                )
+            else:
+                with self.accelerator.unwrap_model(self.model).disable_adapter():
+                    ref_per_token_logps = self._get_per_token_logps(
+                        self.model, prompt_completion_ids, attention_mask, logits_to_keep
+                    )
+
+        # Compute the KL divergence between the model and the reference model
+        if self.beta != 0.0:
+            per_token_kl = (
+                torch.exp(ref_per_token_logps - per_token_logps) - (ref_per_token_logps - per_token_logps) - 1
+            )
+
+        # Compute the loss
+        advantages = inputs["advantages_list"]
+        # When using num_iterations == 1, old_per_token_logps == per_token_logps, so we can skip it's computation (see
+        # _generate_and_score_completions) and use per_token_logps.detach() instead.
+        old_per_token_logps = inputs["old_per_token_logps"] if self.num_iterations > 1 else per_token_logps.detach()
+        coef_1 = torch.exp(per_token_logps - old_per_token_logps)
+        coef_2 = torch.clamp(coef_1, 1 - self.epsilon, 1 + self.epsilon)
+        per_token_loss1 = coef_1 * advantages
+        per_token_loss2 = coef_2 * advantages
+        per_token_loss = -torch.min(per_token_loss1, per_token_loss2)
+        if self.beta != 0.0:
+            per_token_loss = per_token_loss + self.beta * per_token_kl
+        loss = (per_token_loss * completion_mask).sum() / completion_mask.sum()
+
+        # Log the metrics
+        mode = "eval" if self.control.should_evaluate else "train"
+
+        if self.beta != 0.0:
+            mean_kl = ((per_token_kl * completion_mask).sum(dim=1) / completion_mask.sum(dim=1)).mean()
+            self._metrics[mode]["kl"].append(self.accelerator.gather_for_metrics(mean_kl).mean().item())
+
+        is_clipped = (per_token_loss1 < per_token_loss2).float()
+        clip_ratio = (is_clipped * completion_mask).sum() / completion_mask.sum()
+        self._metrics[mode]["clip_ratio"].append(self.accelerator.gather_for_metrics(clip_ratio).mean().item())
+        return loss

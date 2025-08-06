@@ -15,7 +15,8 @@ class number_node:
     def __init__(self, existing_numbers, new_number, index):
         self.index = index
         self.existing_numbers = existing_numbers
-        self.new_number = new_number
+        if new_number is not None:
+            self.existing_numbers.add(new_number)
         self.state_value = 0  # Placeholder for the value of the expression
         self.links = []  # Links to other nodes can be added later
         self.value_updated = False  # Flag to indicate if the value has been updated
@@ -23,18 +24,16 @@ class number_node:
     def __repr__(self):
         links_index = ", ".join(str({"node": link['node'].index, "num_pass": str(link['num_pass'])}) for link in self.links)
         # keep two decimal places for the state value
-        return f"number_node(index={self.index}, existing_numbers={self.existing_numbers}, new_number={self.new_number}, links=[{links_index}], state_value={self.state_value:.2f})"
+        return f"number_node(index={self.index}, existing_numbers={self.existing_numbers}, links=[{links_index}], state_value={self.state_value:.2f})"
     
     def similarity(self, another_node):
         """
         Calculates the similarity between the existing numbers of this node and another number_node.
         Returns a float value representing the similarity.
         """
-        this_node_number_set = self.existing_numbers.union({self.new_number}) if self.new_number != None else self.existing_numbers
-        another_node_number_set = another_node.existing_numbers.union({another_node.new_number}) if another_node.new_number != None else another_node.existing_numbers
         # Calculate the similarity based on the existing numbers
-        common_numbers = this_node_number_set.intersection(another_node_number_set)
-        total_numbers = this_node_number_set.union(another_node_number_set)
+        common_numbers = self.existing_numbers.intersection(another_node.existing_numbers)
+        total_numbers = self.existing_numbers.union(another_node.existing_numbers)
         similarity_score = len(common_numbers) / len(total_numbers) if total_numbers else 0
         return similarity_score
     
@@ -66,7 +65,7 @@ class number_node:
     def merge(self, another_node):
         """
         Merges another expression_node into this node.
-        This method combines the numbers, operators, and phrases from both nodes.
+        This method combines the numbers from both nodes.
         """
         self.existing_numbers.update(another_node.existing_numbers)
         
@@ -150,12 +149,10 @@ class MDP_tree:
         last_node = self.root_node
         for i, number in enumerate(numbers):
             # if the new number is not new, continue
-            if number in last_node.existing_numbers or number == last_node.new_number:
+            if number in last_node.existing_numbers:
                 continue
             # Create a new node with the existing numbers and the new number
             existing_numbers = deepcopy(last_node.existing_numbers)
-            if last_node.new_number != None:
-                existing_numbers.add(last_node.new_number)
             node = number_node(existing_numbers=existing_numbers, new_number=number, index=self.node_count)
             # Search for nodes that share the same new number
             similar_node, similar_node_index = self.bfs_similarity_search(
@@ -330,6 +327,11 @@ def extract_target_from_pred(
     return extracted_predictions, predictions_end_pos
 
 ## Test the MDP tree with a simple example
+#states, positions = thinking_parse(
+#            "123\(123\)123",
+#            extraction_config=[LatexExtractionConfig()],
+#        )
+#print(f"States: {states}, Positions: {positions}")
 ## Construct the MDP tree with the response
 #states, positions = thinking_parse(
 #            "To solve the given problem, we start with the equation:\n\n\\[\n\\frac{a}{25-a} + \\frac{b}{65-b} + \\frac{c}{60-c} = 7\n\\]\n\nWe need to evaluate the expression:\n\n\\[\n\\frac{5}{25-a} + \\frac{13}{65-b} + \\frac{12}{60-c}\n\\]\n\nFirst, let's make a substitution to simplify the problem. Let \\( x = 25 - a \\). Then, \\( a = 25 - x \\). Similarly, let \\( y = 65 - b \\), so \\( b = 65 - y \\), and let \\( z = 60 - c \\), so \\( c = 60 - z \\). Substituting these into the original equation, we get:\n\n\\[\n\\frac{a}{25-a} + \\frac{b}{65-b} + \\frac{c}{60-c} = \\frac{25-x}{x} + \\frac{65-y}{y} + \\frac{60-z}{z} = 7\n\\]\n\nThis can be rewritten as:\n\n\\[\n\\frac{25}{x} - 1 + \\frac{65}{y} - 1 + \\frac{60}{z} - 1 = 7\n\\]\n\nSimplifying the left side, we get:\n\n\\[\n\\frac{25}{x} + \\frac{65}{y} + \\frac{60}{z} - 3 = 7\n\\]\n\nAdding 3 to both sides, we obtain:\n\n\\[\n\\frac{25}{x} + \\frac{65}{y} + \\frac{60}{z} = 10\n\\]\n\nNow, we need to find the value of:\n\n\\[\n\\frac{5}{25-a} + \\frac{13}{65-b} + \\frac{12}{60-c}\n\\]\n\nSubstituting back \\( x = 25 - a \\), \\( y = 65 - b \\), and \\( z = 60 - c \\), we get:\n\n\\[\n\\frac{5}{x} + \\frac{13}{y} + \\frac{12}{z}\n\\]\n\nSince we already know that:\n\n\\[\n\\frac{25}{x} + \\frac{65}{y} + \\frac{60}{z} = 10\n\\]\n\nWe can conclude that:\n\n\\[\n\\frac{5}{x} + \\frac{13}{y} + \\frac{12}{z} = \\frac{1}{2} \\left( \\frac{25}{x} + \\frac{65}{y} + \\frac{60}{z} \\right) = \\frac{1}{2} \\times 10 = 5\n\\]\n\nTherefore, the value of the expression is:\n\n\\[\n\\boxed{5}\n\\]",
@@ -349,52 +351,60 @@ def extract_target_from_pred(
 #exit()
 
 # Read the json file train.json
-with open("XR1-hard/extend600/train.json", "r") as f:
+with open("XR1-hard/extend20/train.json", "r") as f:
     math_qa_dataset = json.load(f)
 
 # Initialize an empty list to store the processed data
 MDP_tree_math_qa_dataset = []
-count = 0
+# count is for all problems
+count = -1
+# problem_id is for valid problems
 problem_id = 0
 # Iterate through each item in the dataset
 for item in math_qa_dataset:
-    # Extract the solution, correct_responses, and wrong_responses
-    solution = item.get("solution", "")
-    correct_responses = item.pop("correct_responses", [])
-    wrong_responses = item.pop("wrong_responses", [])
-    # Create a new MDP_tree for the solution
-    solution_states, solution_positions = thinking_parse(
-        solution,
-        extraction_config=[LatexExtractionConfig()],
-    )
-    problem_mdp_tree = MDP_tree(solution_states, 1)
-    # Update this MDP_tree with correct responses
-    for correct_response in correct_responses:
-        correct_states, correct_positions = thinking_parse(
-            correct_response,
-            extraction_config=[LatexExtractionConfig()],
-        )
-        problem_mdp_tree.update(correct_states, 1)
-    # Update this MDP_tree with wrong responses
-    for wrong_response in wrong_responses:
-        wrong_states, wrong_positions = thinking_parse(
-            wrong_response,
-            extraction_config=[LatexExtractionConfig()],
-        )
-        problem_mdp_tree.update(wrong_states, 0)
-    # Trim the MDP tree if it is too large
-    if len(problem_mdp_tree) > 100:
-        problem_mdp_tree.trim()
-    # Update the node values in the MDP tree
-    problem_mdp_tree.update_node_value()
-    # Store the MDP tree 
-    item["MDP_tree"] = problem_mdp_tree.__repr__()
-    item['id'] = problem_id
-    problem_id += 1
-    # Add the MDP tree to MDP_tree_math_qa_dataset
-    MDP_tree_math_qa_dataset.append(item)
     count += 1
-    print(f"Processed {count} items.")
+    try:
+        # Extract the solution, correct_responses, and wrong_responses
+        solution = item.get("solution", "")
+        correct_responses = item.pop("correct_responses", [])
+        wrong_responses = item.pop("wrong_responses", [])
+        # Create a new MDP_tree for the solution
+        solution_states, solution_positions = thinking_parse(
+            solution,
+            extraction_config=[LatexExtractionConfig()],
+        )
+        problem_mdp_tree = MDP_tree(solution_states, 1)
+        # Update this MDP_tree with correct responses
+        for correct_response in correct_responses:
+            correct_states, correct_positions = thinking_parse(
+                correct_response,
+                extraction_config=[LatexExtractionConfig()],
+            )
+            problem_mdp_tree.update(correct_states, 1)
+        # Update this MDP_tree with wrong responses
+        for wrong_response in wrong_responses:
+            wrong_states, wrong_positions = thinking_parse(
+                wrong_response,
+                extraction_config=[LatexExtractionConfig()],
+            )
+            problem_mdp_tree.update(wrong_states, 0)
+        # Trim the MDP tree if it is too large
+        if len(problem_mdp_tree) > 100:
+            print(f"Trimming MDP tree for problem {count} as it has more than 100 nodes.")
+            problem_mdp_tree.trim()
+        # Update the node values in the MDP tree
+        problem_mdp_tree.update_node_value()
+        # Store the MDP tree 
+        item["MDP_tree"] = problem_mdp_tree.__repr__()
+        item['id'] = problem_id
+        problem_id += 1
+        # Add the MDP tree to MDP_tree_math_qa_dataset
+        MDP_tree_math_qa_dataset.append(item)
+        print(f"Processed {count} items.")
+    except Exception as e:
+        # print the "problem" and the error message
+        print(f"Error processing item {count}: {item.get('problem', 'Unknown problem')} - {e}")
+    
 
 # Save the processed data to a new json file
 with open("train_MDP_tree.json", "w") as f:

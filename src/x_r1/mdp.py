@@ -15,17 +15,15 @@
 import logging
 import os
 import sys
-from dataclasses import dataclass, field
 
 import datasets
 import torch
 import transformers
 from transformers import set_seed
 from transformers.trainer_utils import get_last_checkpoint
-from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-from configs import GRPOConfig, GRPOScriptArguments
+from MDP_configs import GRPOConfig, GRPOScriptArguments
 from rewards import (
     accuracy_thinking_reward,
     accuracy_reward,
@@ -33,15 +31,10 @@ from rewards import (
     format_reward
 )
 from utils.callbacks import get_callbacks
-import utils.prepare_dataset
 from utils.prepare_dataset import prepare_dataset, prepare_quick_eval_dataset, SYSTEM_PROMPT_TAG
 from utils.wandb_logging import init_wandb_training
-from x_grpo_trainer import XGRPOTrainer
-from x_grpo_plus_trainer import XGRPOPlusTrainer
-from x_grpo_supervised_trainer import XGRPOSupervisedTrainer
 from x_grpo_trainer_MDP import XGRPOTrainerMDP
 from trl import ModelConfig, TrlParser, get_peft_config
-from peft import LoraConfig, PeftModel, get_peft_model
 
 
 logger = logging.getLogger(__name__)
@@ -92,6 +85,11 @@ def main(script_args, training_args, model_args):
         quick_eval_dataset = prepare_quick_eval_dataset(script_args.quick_eval_dataset, training_args.tag)
 
     # Get reward functions
+    for reward_func in script_args.reward_funcs:
+        if reward_func not in ["accuracy", "format"]:
+            raise ValueError(
+                f"Reward function {reward_func} is not supported. Please use 'accuracy', 'thinking', 'format', or 'accuracy_thinking'."
+            )
     REWARD_FUNCS_REGISTRY = {
         "accuracy_thinking": accuracy_thinking_reward,
         "accuracy": accuracy_reward,
@@ -126,45 +124,17 @@ def main(script_args, training_args, model_args):
     #############################
     # Initialize the XGRPO trainer
     #############################
-    if script_args.trainer_type == "XGRPOTrainer":
-        trainer = XGRPOTrainer(
-            model=model_args.model_name_or_path,
-            # model = model,
-            reward_funcs=reward_funcs,
-            args=training_args,
-            train_dataset=dataset[script_args.dataset_train_split],
-            eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
-            peft_config=get_peft_config(model_args), # LoRA parameter
-            callbacks=get_callbacks(training_args, model_args),
-            quick_eval_dataset=quick_eval_dataset if script_args.quick_eval_dataset else None,
-        )
-    elif script_args.trainer_type == "XGRPOPlusTrainer":
-        trainer = XGRPOPlusTrainer(
-            model=model_args.model_name_or_path,
-            # model = model,
-            reward_funcs=reward_funcs,
-            args=training_args,
-            train_dataset=dataset[script_args.dataset_train_split],
-            eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
-            peft_config=get_peft_config(model_args), # LoRA parameter
-            callbacks=get_callbacks(training_args, model_args),
-            quick_eval_dataset=quick_eval_dataset if script_args.quick_eval_dataset else None,
-        )
-    elif script_args.trainer_type == "XGRPOSupervisedTrainer":
-        trainer = XGRPOSupervisedTrainer(
-            model=model_args.model_name_or_path,
-            reference_model=script_args.reference_model,
-            # model = model,
-            reward_funcs=reward_funcs,
-            args=training_args,
-            train_dataset=dataset[script_args.dataset_train_split],
-            eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
-            peft_config=get_peft_config(model_args), # LoRA parameter
-            callbacks=get_callbacks(training_args, model_args),
-            quick_eval_dataset=quick_eval_dataset if script_args.quick_eval_dataset else None,
-        )
-    else:
-        raise ValueError(f"Invalid trainer type: {script_args.trainer_type}")
+    trainer = XGRPOTrainerMDP(
+        model=model_args.model_name_or_path,
+        # model = model,
+        reward_funcs=reward_funcs,
+        args=training_args,
+        train_dataset=dataset[script_args.dataset_train_split],
+        eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
+        peft_config=get_peft_config(model_args), # LoRA parameter
+        callbacks=get_callbacks(training_args, model_args),
+        quick_eval_dataset=quick_eval_dataset if script_args.quick_eval_dataset else None,
+    )
 
     print(trainer)
 

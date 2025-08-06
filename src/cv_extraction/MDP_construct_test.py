@@ -5,6 +5,7 @@ import re
 from math_verify import LatexExtractionConfig
 from math_verify.parser import *
 from copy import deepcopy
+from ast import literal_eval
 
 class number_node:
     """
@@ -15,7 +16,8 @@ class number_node:
     def __init__(self, existing_numbers, new_number, index):
         self.index = index
         self.existing_numbers = existing_numbers
-        self.new_number = new_number
+        if new_number is not None:
+            self.existing_numbers.add(new_number)
         self.state_value = 0  # Placeholder for the value of the expression
         self.links = []  # Links to other nodes can be added later
         self.value_updated = False  # Flag to indicate if the value has been updated
@@ -23,18 +25,16 @@ class number_node:
     def __repr__(self):
         links_index = ", ".join(str({"node": link['node'].index, "num_pass": str(link['num_pass'])}) for link in self.links)
         # keep two decimal places for the state value
-        return f"number_node(index={self.index}, existing_numbers={self.existing_numbers}, new_number={self.new_number}, links=[{links_index}], state_value={self.state_value:.2f})"
+        return f"number_node(index={self.index}, existing_numbers={self.existing_numbers}, links=[{links_index}], state_value={self.state_value:.2f})"
     
     def similarity(self, another_node):
         """
         Calculates the similarity between the existing numbers of this node and another number_node.
         Returns a float value representing the similarity.
         """
-        this_node_number_set = self.existing_numbers.union({self.new_number}) if self.new_number != None else self.existing_numbers
-        another_node_number_set = another_node.existing_numbers.union({another_node.new_number}) if another_node.new_number != None else another_node.existing_numbers
         # Calculate the similarity based on the existing numbers
-        common_numbers = this_node_number_set.intersection(another_node_number_set)
-        total_numbers = this_node_number_set.union(another_node_number_set)
+        common_numbers = self.existing_numbers.intersection(another_node.existing_numbers)
+        total_numbers = self.existing_numbers.union(another_node.existing_numbers)
         similarity_score = len(common_numbers) / len(total_numbers) if total_numbers else 0
         return similarity_score
     
@@ -66,7 +66,7 @@ class number_node:
     def merge(self, another_node):
         """
         Merges another expression_node into this node.
-        This method combines the numbers, operators, and phrases from both nodes.
+        This method combines the numbers from both nodes.
         """
         self.existing_numbers.update(another_node.existing_numbers)
         
@@ -150,12 +150,10 @@ class MDP_tree:
         last_node = self.root_node
         for i, number in enumerate(numbers):
             # if the new number is not new, continue
-            if number in last_node.existing_numbers or number == last_node.new_number:
+            if number in last_node.existing_numbers:
                 continue
             # Create a new node with the existing numbers and the new number
             existing_numbers = deepcopy(last_node.existing_numbers)
-            if last_node.new_number != None:
-                existing_numbers.add(last_node.new_number)
             node = number_node(existing_numbers=existing_numbers, new_number=number, index=self.node_count)
             # Search for nodes that share the same new number
             similar_node, similar_node_index = self.bfs_similarity_search(
@@ -251,6 +249,84 @@ class MDP_tree:
         dfs(self.root_node)
         # Reset the "value_updated" flag for all nodes
         reset_value_updated_flag_bfs(self.root_node)
+
+    def advantages_and_probability(self, expression_list, positions, generation_length, final_reward=0):
+        """
+        Calculate the advantage of each action (represented by expressions) based on the MDP tree.
+        Return a list of advantages that contain the advantage for each token in the generation.
+        At the same time, it also calculates the probability of the whole generation.
+        """
+        # Parse the numbers in the expression_list
+        numbers_positions = []
+        for expression, position in zip(expression_list, positions):
+            # Extract numbers from the expression using regex
+            numbers = number_parse(expression)
+            for number in numbers:
+                numbers_positions.append((number, position))
+        # Parse the new numbers and match nodes
+        advantages = []
+        last_node = self.root_node
+        last_position = 0
+        probability = 1.0  # Initialize the probability of the generation
+        for number, position in numbers_positions:
+            # if the new number is not new, continue
+            if number in last_node.existing_numbers:
+                continue
+            # if the new number is new, create a numbers set and find the matching node
+            existing_numbers = deepcopy(last_node.existing_numbers)
+            set_to_match = existing_numbers.union({number})
+            # Search for nodes that share the same new number through the links
+            for link in last_node.links:
+                if link['node'].existing_numbers == set_to_match:
+                    # If a matching node is found, calculate the advantage
+                    advantage = link['node'].state_value - last_node.state_value
+                    advantages.extend([advantage] * (position - last_position))
+                    probability *= link['num_pass'] / sum(_link['num_pass'] for _link in last_node.links)
+                    last_node = link['node']
+                    last_position = position
+                    break
+            else:
+                # There should be no case where a new number is not found in the links
+                print(f"Warning: New number set {existing_numbers} not found in the links of node {last_node}.")
+
+        # Finally, we deal with the terminal state
+        if final_reward < 0.5:
+            advantages.extend([self.wrong_state.state_value - last_node.state_value] * (generation_length - last_position))
+            for link in last_node.links:
+                if link['node'].index == self.wrong_state.index:
+                    probability *= link['num_pass'] / sum(_link['num_pass'] for _link in last_node.links)
+                    break
+        else:
+            advantages.extend([self.correct_state.state_value - last_node.state_value] * (generation_length - last_position))
+            for link in last_node.links:
+                if link['node'].index == self.correct_state.index:
+                    probability *= link['num_pass'] / sum(_link['num_pass'] for _link in last_node.links)
+                    break
+
+        # Ensure the length of advantages matches the generation length
+        if len(advantages) < generation_length:
+            advantages.extend([0] * (generation_length - len(advantages)))
+        elif len(advantages) > generation_length:
+            advantages = advantages[:generation_length]
+        return advantages, probability
+
+    def bfs_decay(self, decay_rate=0.99):
+        """
+        Decays the number of passes in the MDP tree.
+        This method can be used to reduce the influence of older actions over time.
+        """
+        queue = [self.root_node]
+        visited = set()
+        while queue:
+            current_node = queue.pop(0)
+            if current_node.index in visited:
+                continue
+            visited.add(current_node.index)
+            # Decay the number of passes for each link
+            for link in current_node.links:
+                link['num_pass'] *= decay_rate
+                queue.append(link['node'])
+            current_node.sync_links()
         
 def number_parse(
     pred: str,
@@ -336,99 +412,161 @@ def MDP_tree_from_string(
     Parses a string representation of an MDP_tree and returns an MDP_tree object.
     The string should be in the format returned by the __repr__ method of MDP_tree.
     """
-    # Extract the content within MDP_tree(...)
-    content_match = re.search(r'MDP_tree\((.*)\)', str_representation, re.DOTALL)
-    if not content_match:
+    if not str_representation or not str_representation.startswith("MDP_tree("):
         return None
-    content = content_match.group(1)
+
+    # Extract the content inside MDP_tree(...)
+    content = str_representation[len("MDP_tree("):-1]
+    if not content:
+        return MDP_tree([], 0)
 
     # Regex to parse each number_node
-    node_pattern = re.compile(r"number_node\(index=(?P<index>\d+), existing_numbers=(?P<existing_numbers>set\(\)|{.*?}), new_number=(?P<new_number>\w+), links=\[(?P<links>.*?)\], state_value=(?P<state_value>[-.\d]+)\)")
+    node_pattern = re.compile(r"number_node\(index=(?P<index>\d+), existing_numbers=(?P<numbers>set\(\)|{.*?}), links=\[(?P<links>.*?)\], state_value=(?P<value>[\d\.-]+)\)")
     
-    nodes_data = []
+    nodes_data = {}
     for match in node_pattern.finditer(content):
-        nodes_data.append(match.groupdict())
-
-    if not nodes_data:
-        return None
-
-    # Create all nodes first and store them in a dictionary indexed by their ID
-    nodes = {}
-    for data in nodes_data:
+        data = match.groupdict()
         index = int(data['index'])
         
-        # Parse existing_numbers
-        existing_numbers_str = data['existing_numbers']
-        if existing_numbers_str == 'set()':
+        # Safely evaluate existing_numbers
+        try:
+            existing_numbers = literal_eval(data['numbers'])
+        except (ValueError, SyntaxError):
             existing_numbers = set()
-        else:
-            # From "{1, 2, 3}" to set({1, 2, 3})
-            existing_numbers = set(map(int, existing_numbers_str.strip('{}').split(','))) if existing_numbers_str != '{}' else set()
 
-        # Parse new_number
-        new_number_str = data['new_number']
-        new_number = int(new_number_str) if new_number_str != 'None' else None
+        state_value = float(data['value'])
         
-        node = number_node(existing_numbers=existing_numbers, new_number=new_number, index=index)
-        node.state_value = float(data['state_value'])
-        nodes[index] = node
-
-    # Now, establish the links
-    for data in nodes_data:
-        index = int(data['index'])
-        current_node = nodes[index]
-        
+        # Parse links
         links_str = data['links']
+        links = []
         if links_str:
             link_pattern = re.compile(r"{'node': (\d+), 'num_pass': '(\d+)'}")
             for link_match in link_pattern.finditer(links_str):
-                target_node_index = int(link_match.group(1))
-                num_pass = int(link_match.group(2))
-                if target_node_index in nodes:
-                    target_node = nodes[target_node_index]
-                    current_node.links.append({'node': target_node, 'num_pass': num_pass})
+                links.append({'node': int(link_match.group(1)), 'num_pass': int(link_match.group(2))})
 
-    # Reconstruct the MDP_tree object
-    # The root node is assumed to be the one with index 0
-    if 0 not in nodes:
-        return None # Or handle error appropriately
-        
-    root_node = nodes[0]
-    
-    # Create a dummy MDP_tree and then populate it
-    # The constructor of MDP_tree requires expression_list, which we don't have.
-    # So we create a dummy one and then replace its properties.
+        nodes_data[index] = {
+            'existing_numbers': existing_numbers,
+            'state_value': state_value,
+            'links': links
+        }
+
+    if not nodes_data:
+        return MDP_tree([], 0)
+
+    # Create node objects
+    node_objects = {}
+    for index, data in nodes_data.items():
+        node = number_node(existing_numbers=data['existing_numbers'], new_number=None, index=index)
+        node.state_value = data['state_value']
+        node_objects[index] = node
+
+    # Link nodes
+    for index, data in nodes_data.items():
+        current_node = node_objects[index]
+        for link_info in data['links']:
+            target_node_index = link_info['node']
+            if target_node_index in node_objects:
+                target_node = node_objects[target_node_index]
+                current_node.update_link(target_node, link_info['num_pass'])
+
+    # Create the MDP_tree object
+    # Assuming the root is always index 0, and final_reward is not stored in the string repr
+    # We can create a dummy MDP_tree and then set its root.
     mdp_tree = MDP_tree([], 0) 
-    mdp_tree.root_node = root_node
+    if 0 in node_objects:
+        mdp_tree.root_node = node_objects[0]
     
     # Find correct and wrong states
-    # A state is considered final if it has no outgoing links.
-    # Correct state has value > 0.5, wrong state has value < 0.5
-    for node in nodes.values():
-        if not node.links:
+    max_node_index = -1
+    if node_objects:
+        max_node_index = max(node_objects.keys())
+
+    for node in node_objects.values():
+        if not node.links: # Final states have no outgoing links
             if node.state_value >= 0.5:
                 mdp_tree.correct_state = node
             else:
                 mdp_tree.wrong_state = node
 
-    mdp_tree.node_count = len(nodes)
+    mdp_tree.node_count = max_node_index + 1
     
     return mdp_tree
 
-# Read the json file train.json
-with open("src/cv_extraction/XR1-hard/MDP_extend_20/train.json", "r") as f:
-    math_qa_dataset = json.load(f)
+test_case = 1
 
-for item in math_qa_dataset:
-    # Get the 'MDP_tree' field from the item
-    mdp_tree_str = item.get('MDP_tree', None)
-    # reconstruct the MDP_tree from the string representation
-    mdp_tree = MDP_tree_from_string(mdp_tree_str)
-    another_mdp_tree_str = mdp_tree.__repr__()
-    # Check if the reconstruction is equal to the original string
-    if len(another_mdp_tree_str) != len(mdp_tree_str):
-        print(f"Reconstruction failed for item with id {item.get('id', 'unknown')}.")
-        print(f"1: {mdp_tree_str}")
-        print(f"2: {another_mdp_tree_str}")
+# Test the MDP_tree_from_string function
+if test_case == 0:
+    # Read the json file train.json
+    with open("src/cv_extraction/XR1-hard/MDP_extend_20/train.json", "r") as f:
+        math_qa_dataset = json.load(f)
 
-    
+    for item in math_qa_dataset:
+        # Get the 'MDP_tree' field from the item
+        mdp_tree_str = item.get('MDP_tree', None)
+        # reconstruct the MDP_tree from the string representation
+        mdp_tree = MDP_tree_from_string(mdp_tree_str)
+        another_mdp_tree_str = mdp_tree.__repr__()
+        # Check if the reconstruction is equal to the original string
+        if len(another_mdp_tree_str) != len(mdp_tree_str):
+            print(f"Reconstruction failed for item with id {item.get('id', 'unknown')}.")
+            print(f"1: {mdp_tree_str}")
+            print(f"2: {another_mdp_tree_str}")
+
+elif test_case == 1: 
+    # Read the json file train.json
+    with open("src/cv_extraction/XR1-hard/extend20/train.json", "r") as f:
+        math_qa_dataset = json.load(f)
+
+    item = math_qa_dataset[0]
+    # Extract the solution, correct_responses, and wrong_responses
+    solution = item.get("solution", "")
+    correct_responses = item.pop("correct_responses", [])
+    wrong_responses = item.pop("wrong_responses", [])
+    generation = correct_responses[0]
+    # Create a new MDP_tree for the solution
+    solution_states, solution_positions = thinking_parse(
+        solution,
+        extraction_config=[LatexExtractionConfig()],
+    )
+    problem_mdp_tree = MDP_tree(solution_states, 1)
+    # Update this MDP_tree with correct responses
+    for correct_response in correct_responses:
+        correct_states, correct_positions = thinking_parse(
+            correct_response,
+            extraction_config=[LatexExtractionConfig()],
+        )
+        problem_mdp_tree.update(correct_states, 1)
+    # Update this MDP_tree with wrong responses
+    for wrong_response in wrong_responses:
+        wrong_states, wrong_positions = thinking_parse(
+            wrong_response,
+            extraction_config=[LatexExtractionConfig()],
+        )
+        problem_mdp_tree.update(wrong_states, 0)
+
+    # Calculate the advantages and probability for the generation
+    generation_states, generation_positions = thinking_parse(
+        generation,
+        extraction_config=[LatexExtractionConfig()],
+    )
+    problem_mdp_tree.update_node_value()
+    advantages, probability = problem_mdp_tree.advantages_and_probability(
+        generation_states,
+        generation_positions,
+        generation_length=len(generation),
+        final_reward=1,
+    )
+    print("Question: ", item['problem'])
+    print("Generation: ", generation)
+    last_advantage_pos = -1
+    for i, advantage in enumerate(advantages):
+        if advantage != advantages[last_advantage_pos]:
+            print(f"In the {last_advantage_pos} to {i} position, the advantage is {advantages[last_advantage_pos]}.")
+            print(f"In that position, the generation is: {generation[last_advantage_pos + 1:i]}")
+            print("---" * 10)
+            last_advantage_pos = i
+    if last_advantage_pos + 1 < len(generation):
+        print(f"In the {last_advantage_pos + 1} to {len(generation)} position, the advantage is {advantages[last_advantage_pos]}.")
+        print(f"In that position, the generation is: {generation[last_advantage_pos + 1:]}")
+        print("---" * 10)
+    print(f"Probability: {probability}")

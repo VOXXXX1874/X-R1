@@ -58,57 +58,6 @@ from utils.MDP import *
 # rewards. When it's a string, it's a model ID, so it's loaded as a pretrained model.
 RewardFunc = Union[str, PreTrainedModel, Callable[[list, list], list[float]]]
 
-def print_prompt_completions_sample(prompts: list[str], completions: list[str], rewards: list[int], step: int) -> None:
-    """
-    Print out a sample of model completions to the console.
-
-    This function creates a nicely formatted table showing prompt-completion pairs, useful for monitoring model outputs
-    during training. It requires the `rich` library to be installed.
-
-    Args:
-        prompts (`list[str]`):
-            List of prompts.
-        completions (`list[str]`):
-            List of completions corresponding to the prompts.
-        reward (`list[float]`):
-            List of rewards corresponding to the completions.
-        step (`int`):
-            Current training step number, used in the output title.
-
-    Example:
-    ```python
-    >>> from trl.trainer.utils import print_prompt_completions_sample
-    >>> prompts = ["The sky is", "The sun is"]
-    >>> completions = [" blue.", " in the sky."]
-    >>> rewards = [0.12345, 0.68789]
-    >>> print_prompt_completions_sample(prompts, completions, rewards, 42)
-    ╭─────────────── Step 42 ────────────────╮
-    │ ┏━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━┓ │
-    │ ┃ Prompt     ┃ Completion   ┃ Reward ┃ │
-    │ ┡━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━┩ │
-    │ │ The sky is │  blue.       │   0.12 │ │
-    │ ├────────────┼──────────────┼────────┤ │
-    │ │ The sun is │  in the sky. │   0.68 │ │
-    │ └────────────┴──────────────┴────────┘ │
-    ╰────────────────────────────────────────╯
-    ```
-    """
-
-    console = Console()
-    table = Table(show_header=True, header_style="bold white", expand=True)
-
-    # Add columns
-    table.add_column("Prompt", style="bright_yellow")
-    table.add_column("Completion", style="bright_green")
-    table.add_column("Reward", style="bold cyan", justify="right")
-
-    for prompt, completion, reward in zip(prompts, completions, rewards, strict=True):
-        table.add_row(Text(prompt), Text(completion), f"{reward:.2f}")  # Formatting reward to 2 decimal places
-        table.add_section()  # Adds a separator between rows
-
-    panel = Panel(table, expand=False, title=f"Step {step}", border_style="bold white")
-    console.print(panel)
-
 class XGRPOTrainerMDP(GRPOTrainer):
     # base trl GRPO_trainer
 
@@ -364,57 +313,57 @@ class XGRPOTrainerMDP(GRPOTrainer):
                 # Repeat all input columns (but "prompt" and "completion") to match the number of generations
                 keys = [key for key in inputs[0] if key not in ["prompt", "completion"]]
                 reward_kwargs = {key: [example[key] for example in inputs] for key in keys}
-                output_reward_func, _ = reward_func(completions=completions, tag = self.tag, **reward_kwargs)
+                output_reward_func, _ = reward_func(completions=completions, tag = self.tag, silence = True, **reward_kwargs)
                 rewards_per_func[:, i] = torch.tensor(output_reward_func, dtype=torch.float32, device=device)
 
         if self.tag:
-            # TODO: Think of a method to deal with format rewards
+            # we do not support tag
             raise ValueError(
-                "Current implementation is not compatible with the format reward function. Please set `tag=False` in the config."
+                "The XGRPOTrainerMDP does not support tag in the response. Please set `args.tag` to `False`."
             )
-        else:
-            # If no tag, we can parse the completions_text and use reward directly
-            question_id = inputs[0]["id"]
-            expressions_rewards_pair = []
-            for i, completion in enumerate(completions_text):
-                # Extract the number from the expressions in completions text
-                expressions, positions = thinking_parse(
-                    completion,
-                    extraction_config=[LatexExtractionConfig()],
-                )
-                # Convert the character positions to token positions
-                # Re-tokenize and get the offsets_mapping
-                encoding = self.processing_class(completion, return_offsets_mapping=True, add_special_tokens=False)
-                offsets = encoding["offset_mapping"]
-                position_pointer = 0
-                for token_idx, (_, end) in enumerate(offsets):
-                    # Find the corresponding character position in the completion
-                    while position_pointer < len(positions) -1 and positions[position_pointer] < end:
-                        positions[position_pointer] = token_idx
-                        position_pointer += 1
-                expressions_rewards_pair.append((question_id, expressions, positions, rewards_per_func[i][0].item()))
-            # Gather the expressions_rewards_pair and update the MDP tree
-            all_expressions_rewards_pair = gather_object(expressions_rewards_pair)
-            past_id = -1
-            for i, (id, expressions, positions, reward) in enumerate(all_expressions_rewards_pair):
-                if id != past_id:
-                    self.tree_dict[id].bfs_decay(self.args.delta)
-                    past_id = id
-                if id not in self.tree_dict:
-                    raise ValueError(f"Question ID {id} not found in the MDP tree.")
-                # Update the MDP tree with the new reward
-                self.tree_dict[id].update(expressions, reward)
-            # Update the state value in the MDP tree
-            self.tree_dict[question_id].update_node_value()
-            # According to the updated MDP tree, allocate the advantages and calculate the probability for each generation
-            advantages_list = []
-            for expressions_reward in expressions_rewards_pair:
-                id, expressions, positions, reward = expressions_reward
-                advantages= self.tree_dict[id].advantages(
-                    expressions, positions, completion_ids.size(1), final_reward=reward
-                )
-                # The length of advantages already matches the generation length
-                advantages_list.append(advantages)
+
+        # If no tag, we can parse the completions_text and use reward directly
+        question_id = inputs[0]["id"]
+        expressions_rewards_pair = []
+        for i, completion in enumerate(completions_text):
+            # Extract the number from the expressions in completions text
+            expressions, positions = thinking_parse(
+                completion,
+                extraction_config=[LatexExtractionConfig()],
+            )
+            # Convert the character positions to token positions
+            # Re-tokenize and get the offsets_mapping
+            encoding = self.processing_class(completion, return_offsets_mapping=True, add_special_tokens=False)
+            offsets = encoding["offset_mapping"]
+            position_pointer = 0
+            for token_idx, (_, end) in enumerate(offsets):
+                # Find the corresponding character position in the completion
+                while position_pointer < len(positions) -1 and positions[position_pointer] < end:
+                    positions[position_pointer] = token_idx
+                    position_pointer += 1
+            expressions_rewards_pair.append((question_id, expressions, positions, rewards_per_func[i][0].item()))
+        # Gather the expressions_rewards_pair and update the MDP tree
+        all_expressions_rewards_pair = gather_object(expressions_rewards_pair)
+        past_id = -1
+        for i, (id, expressions, positions, reward) in enumerate(all_expressions_rewards_pair):
+            if id != past_id:
+                self.tree_dict[id].bfs_decay(self.args.delta)
+                past_id = id
+            if id not in self.tree_dict:
+                raise ValueError(f"Question ID {id} not found in the MDP tree.")
+            # Update the MDP tree with the new reward
+            self.tree_dict[id].update(expressions, reward)
+        # Update the state value in the MDP tree
+        self.tree_dict[question_id].update_node_value()
+        # According to the updated MDP tree, allocate the advantages and calculate the probability for each generation
+        advantages_list = []
+        for expressions_reward in expressions_rewards_pair:
+            id, expressions, positions, reward = expressions_reward
+            advantages= self.tree_dict[id].advantages(
+                expressions, positions, completion_ids.size(1), final_reward=reward
+            )
+            # The length of advantages already matches the generation length
+            advantages_list.append(advantages)
 
         # Log the metrics
         mode = "eval" if self.control.should_evaluate else "train"
@@ -431,46 +380,41 @@ class XGRPOTrainerMDP(GRPOTrainer):
             self._metrics[mode][f"rewards/{reward_func_name}"].append(reward_per_func[i].item())
 
         if self.log_completions and self.state.global_step % self.args.logging_steps == 0:
-            prompts_to_log = gather_object(prompts_text)
-            completions_to_log = gather_object(completions_text)
-            rewards_per_func = gather(rewards_per_func)
-            rewards = (rewards_per_func * self.reward_weights.to(device).unsqueeze(0)).sum(dim=1)
-            rewards_to_log = rewards.tolist()
-            # Sample a few prompts and completions to log
-            if len(prompts_to_log) > 10:
-                sample_indices = random.sample(range(len(prompts_to_log)), 10)
-                prompts_to_log = [prompts_to_log[i] for i in sample_indices]
-                completions_to_log = [completions_to_log[i] for i in sample_indices]
-                rewards_to_log = [rewards_to_log[i] for i in sample_indices]
-
+            # Log the completions, advantages distribution in decoded token, and reward
             if self.accelerator.is_main_process:
-                print_prompt_completions_sample(
-                    prompts_to_log,
-                    completions_to_log,
-                    rewards_to_log,
-                    self.state.global_step,
-                )
-                #if self.args.report_to and "wandb" in self.args.report_to and wandb.run is not None:
-                #    import pandas as pd
-                #
-                #    # For logging
-                #    table = {
-                #        "step": [str(self.state.global_step)] * len(rewards),
-                #        "prompt": prompts_to_log,
-                #        "completion": completions_to_log,
-                #        "reward": rewards.tolist(),
-                #    }
-                #    df = pd.DataFrame(table)
-                #    wandb.log({"completions": wandb.Table(dataframe=df)})
+                for i, advantages in enumerate(advantages_list):
+                    print('*' * 100)
+                    print(f"Prompt: {prompts_text[i]}")
+                    print('-' * 100)
+                    last_advantage_pos = 0
+                    for j, advantage in enumerate(advantages):
+                        if advantage != advantages[last_advantage_pos]:
+                            print(f"In the {last_advantage_pos} to {j-1} tokens, the advantage is {advantages[last_advantage_pos]}.")
+                            decoded_segment = self.processing_class.decode(
+                                completion_ids[i][last_advantage_pos:j-1], skip_special_tokens=True
+                            )
+                            print("In that position, the decoded completion is:")
+                            print(decoded_segment)
+                            print('-' * 100)
+                            last_advantage_pos = j
+                    print(f"In the {last_advantage_pos} to {len(advantages)} position, the advantage is {advantages[last_advantage_pos]}.")
+                    decoded_segment = self.processing_class.decode(
+                        completion_ids[i][last_advantage_pos:], skip_special_tokens=True
+                    )
+                    print(f"In that position, the decoded completion is: {decoded_segment}")
+                    print('-' * 100)
+                    print(f"The reward for this completion is {rewards_per_func[i][0].item()}.")
+                    print('*' * 100)
 
-        # Return the advantages and probability for each generation
+        advantages_list = torch.tensor(advantages_list, device=device, dtype=torch.bfloat16) * self.reward_weights[0].to(device)
+
         return {
             "prompt_ids": prompt_ids,
             "prompt_mask": prompt_mask,
             "completion_ids": completion_ids,
             "completion_mask": completion_mask,
             "old_per_token_logps": old_per_token_logps,
-            "advantages_list": torch.tensor(advantages_list, device=device, dtype=torch.bfloat16),
+            "advantages_list": advantages_list,
         }
     
     @profiling_decorator

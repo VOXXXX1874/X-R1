@@ -265,6 +265,8 @@ class MDP_tree:
         advantages = []
         last_node = self.root_node
         last_position = 0
+        # Set an undetermined segment to handle cases where there are several new numbers in an expression
+        undetermined_segment = (0,0)
         for number, position in numbers_positions:
             # if the new number is not new, continue
             if number in last_node.existing_numbers:
@@ -277,7 +279,13 @@ class MDP_tree:
                 if link['node'].existing_numbers == set_to_match:
                     # If a matching node is found, calculate the advantage
                     advantage = link['node'].state_value - last_node.state_value
-                    advantages.extend([advantage] * (position - last_position))
+                    if position - last_position > 0:
+                        advantages.extend([advantage] * (position - last_position))
+                        undetermined_segment = (last_position, position)
+                    else:
+                        if abs(advantage) > abs(advantages[-1]):
+                            # If the advantage is larger than the previous undetermined segment, update it
+                            advantages[undetermined_segment[0]:undetermined_segment[1]] = [advantage] * (undetermined_segment[1] - undetermined_segment[0])
                     last_node = link['node']
                     last_position = position
                     break

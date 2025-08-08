@@ -1,0 +1,60 @@
+# This is X-R1(https://github.com/dhcode-cpp/X-R1) project training config:
+# required = 1x3090(24G)/4090(24G)
+# running time 2~3h
+
+# Model arguments
+model_name_or_path: Qwen/Qwen2.5-1.5B-instruct
+model_revision: main
+torch_dtype: bfloat16
+attn_implementation: flash_attention_2
+
+# Data training arguments
+dataset_name: src/cv_extraction/XR1-hard/MDP_extend_600
+dataset_configs:
+- train
+num_processes: 4
+
+# Trainer config
+reward_funcs: ['accuracy']
+reward_weights: [1.0]
+#beta: 0.04
+delta: 0.3
+tag: False
+temperature: 0.7
+quick_eval_dataset: src/cv_extraction/MATH-500/exp_num_tt_012
+bf16: true
+use_vllm: true
+vllm_device: auto
+vllm_gpu_memory_utilization: 0.7
+do_eval: false
+eval_strategy: "no"
+eval_steps: 10
+gradient_accumulation_steps: 8
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: false
+learning_rate: 6.0e-06
+log_completions: true
+log_level: info
+logging_steps: 1
+logging_strategy: steps
+lr_scheduler_type: cosine
+max_prompt_length: 256
+num_generations: 12
+extra_generations: 120
+num_iterations: 4   
+max_completion_length: 1024
+max_steps: -1
+num_train_epochs: 50
+output_dir: output/MDP1-1.5B
+overwrite_output_dir: true
+per_device_eval_batch_size: 1
+per_device_train_batch_size: 3
+push_to_hub: False
+report_to:
+- wandb
+save_strategy: "epoch"
+seed: 42
+warmup_ratio: 0.1
+use_liger: true
+use_liger_kernel: true

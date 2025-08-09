@@ -317,15 +317,28 @@ class XGRPOTrainerMDP(GRPOTrainer):
                 rewards_per_func[:, i] = torch.tensor(output_reward_func, dtype=torch.float32, device=device)
 
         if self.tag:
-            # we do not support tag
-            raise ValueError(
-                "The XGRPOTrainerMDP does not support tag in the response. Please set `args.tag` to `False`."
-            )
+            # For the format reward, we follow the implementation of GRPO algo
+            format_rewards = gather(rewards_per_func)[:,1]
+
+            # Compute grouped-wise rewards
+            mean_grouped_format_rewards = format_rewards.view(-1, self.extra_generations).mean(dim=1)
+            std_grouped_format_rewards = format_rewards.view(-1, self.extra_generations).std(dim=1)
+
+            # Normalize the rewards to compute the advantages
+            mean_grouped_format_rewards = mean_grouped_format_rewards.repeat_interleave(self.extra_generations, dim=0)
+            std_grouped_format_rewards = std_grouped_format_rewards.repeat_interleave(self.extra_generations, dim=0)
+            format_advantages_list = (format_rewards - mean_grouped_format_rewards) / (std_grouped_format_rewards + 1e-4)
+
+            # Slice to keep only the local part of the data
+            format_advantages_list = format_advantages_list[process_slice]
 
         # If no tag, we can parse the completions_text and use reward directly
         question_id = inputs[0]["id"]
         expressions_rewards_pair = []
         for i, completion in enumerate(completions_text):
+            # For the response that is not well-formed, we skip it
+            if self.tag and rewards_per_func[i,1] < 0.1:
+                continue
             # Extract the number from the expressions in completions text
             expressions, positions = thinking_parse(
                 completion,
@@ -357,12 +370,21 @@ class XGRPOTrainerMDP(GRPOTrainer):
         self.tree_dict[question_id].update_node_value()
         # According to the updated MDP tree, allocate the advantages and calculate the probability for each generation
         advantages_list = []
-        for expressions_reward in expressions_rewards_pair:
-            id, expressions, positions, reward = expressions_reward
-            advantages= self.tree_dict[id].advantages(
-                expressions, positions, completion_ids.size(1), final_reward=reward
-            )
-            # The length of advantages already matches the generation length
+        for i, expressions_reward in enumerate(expressions_rewards_pair):
+            if self.tag and rewards_per_func[i,1] < 0.1:
+                # If the generation is not well-formed, we only consider the format advantages
+                advantages = torch.zeros(completion_ids.size(1), device=device)
+            else:
+                id, expressions, positions, reward = expressions_reward
+                advantages = self.tree_dict[id].advantages(
+                    expressions, positions, completion_ids.size(1), final_reward=reward
+                )
+                advantages = torch.tensor(advantages, device=device)
+
+            if self.tag:
+                # Use reward_weights to weighted sum the advantages and format advantages
+                advantages = advantages * self.reward_weights[0].to(device) + format_advantages_list[i] * self.reward_weights[1].to(device)
+
             advantages_list.append(advantages)
 
         # Log the metrics
@@ -371,7 +393,7 @@ class XGRPOTrainerMDP(GRPOTrainer):
         completion_length = self.accelerator.gather_for_metrics(completion_mask.sum(1)).float().mean().item()
         self._metrics[mode]["completion_length"].append(completion_length)
 
-        reward_per_func = rewards_per_func.mean(0)
+        reward_per_func = gather(rewards_per_func).mean(0)
         for i, reward_func in enumerate(self.reward_funcs):
             if isinstance(reward_func, nn.Module):  # Module instead of PretrainedModel for compat with compiled models
                 reward_func_name = reward_func.config._name_or_path.split("/")[-1]
@@ -403,7 +425,9 @@ class XGRPOTrainerMDP(GRPOTrainer):
                     )
                     print(f"In that position, the decoded completion is: {decoded_segment}")
                     print('-' * 100)
-                    print(f"The reward for this completion is {rewards_per_func[i][0].item()}.")
+                    print(f"The accuracy reward for this completion is {rewards_per_func[i][0].item()}.")
+                    if self.tag:
+                        print(f"The format reward for this completion is {rewards_per_func[i][1].item()}.")
                     print('*' * 100)
 
         advantages_list = torch.tensor(advantages_list, device=device, dtype=torch.bfloat16) * self.reward_weights[0].to(device)

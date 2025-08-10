@@ -14,10 +14,6 @@
 '''https://github.com/dhcode-cpp/X-R1'''
 '''modify to print online sampling string'''
 
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
 from typing import Any, Callable, Optional, Sized, Union
 import torch
 import torch.nn as nn
@@ -52,6 +48,7 @@ if is_wandb_available():
 import random
 
 from utils.MDP import *
+import json
 
 
 # What we call a reward function is a callable that takes a list of prompts and completions and returns a list of
@@ -82,6 +79,8 @@ class XGRPOTrainerMDP(GRPOTrainer):
         self.tree_dict = {}
         for item in train_dataset:
             self.tree_dict[item['id']] = MDP_tree_from_string(item['MDP_tree'])
+        # Save the trees every time all the trees are updated 
+        self.last_tree_save = 0
 
         GRPOTrainer.__init__(
             self,
@@ -181,6 +180,17 @@ class XGRPOTrainerMDP(GRPOTrainer):
             # Generate completions using vLLM: gather all prompts and use them in a single call in the main process
             all_prompts_text = gather_object(prompts_text)
             if self.accelerator.is_main_process:
+                # Check if we need to save the tree
+                if (self.state.global_step/self.num_iterations) * self.num_questions_per_step // len(self.train_dataset) > self.last_tree_save:
+                    self.last_tree_save = (self.state.global_step/self.num_iterations) * self.num_questions_per_step // len(self.train_dataset)
+                    tree_dict_to_save = []
+                    for item in self.train_dataset:
+                        item['MDP_tree'] = self.tree_dict[item['id']].__repr__()
+                    # Open a json file in self.args.output_dir and save the tree_dict
+                    with open(f"{self.args.output_dir}/tree_dict_{self.last_tree_save}.json", "w") as f:
+                        json.dump(tree_dict_to_save, f)
+
+                # Check if we need to run quick eval
                 if self.quick_eval_dataset is not None and (self.state.global_step/self.num_iterations) % self.args.eval_steps == 1:
                     self.run_quick_eval = True
                 # perform quick eval with the quick eval dataset if step is a multiple of eval_steps
@@ -321,12 +331,12 @@ class XGRPOTrainerMDP(GRPOTrainer):
             format_rewards = gather(rewards_per_func)[:,1]
 
             # Compute grouped-wise rewards
-            mean_grouped_format_rewards = format_rewards.view(-1, self.extra_generations).mean(dim=1)
-            std_grouped_format_rewards = format_rewards.view(-1, self.extra_generations).std(dim=1)
+            mean_grouped_format_rewards = format_rewards.view(-1, self.args.extra_generations).mean(dim=1)
+            std_grouped_format_rewards = format_rewards.view(-1, self.args.extra_generations).std(dim=1)
 
             # Normalize the rewards to compute the advantages
-            mean_grouped_format_rewards = mean_grouped_format_rewards.repeat_interleave(self.extra_generations, dim=0)
-            std_grouped_format_rewards = std_grouped_format_rewards.repeat_interleave(self.extra_generations, dim=0)
+            mean_grouped_format_rewards = mean_grouped_format_rewards.repeat_interleave(self.args.extra_generations, dim=0)
+            std_grouped_format_rewards = std_grouped_format_rewards.repeat_interleave(self.args.extra_generations, dim=0)
             format_advantages_list = (format_rewards - mean_grouped_format_rewards) / (std_grouped_format_rewards + 1e-4)
 
             # Slice to keep only the local part of the data
@@ -338,6 +348,7 @@ class XGRPOTrainerMDP(GRPOTrainer):
         for i, completion in enumerate(completions_text):
             # For the response that is not well-formed, we skip it
             if self.tag and rewards_per_func[i,1] < 0.1:
+                expressions_rewards_pair.append((-1, [], [], 0))
                 continue
             # Extract the number from the expressions in completions text
             expressions, positions = thinking_parse(
@@ -359,6 +370,8 @@ class XGRPOTrainerMDP(GRPOTrainer):
         all_expressions_rewards_pair = gather_object(expressions_rewards_pair)
         past_id = -1
         for i, (id, expressions, positions, reward) in enumerate(all_expressions_rewards_pair):
+            if self.tag and id == -1:
+                continue
             if id != past_id:
                 self.tree_dict[id].bfs_decay(self.args.delta)
                 past_id = id
@@ -380,10 +393,10 @@ class XGRPOTrainerMDP(GRPOTrainer):
                     expressions, positions, completion_ids.size(1), final_reward=reward
                 )
                 advantages = torch.tensor(advantages, device=device)
-
+            advantages = advantages * self.reward_weights[0].to(device)
             if self.tag:
                 # Use reward_weights to weighted sum the advantages and format advantages
-                advantages = advantages * self.reward_weights[0].to(device) + format_advantages_list[i] * self.reward_weights[1].to(device)
+                advantages += format_advantages_list[i] * self.reward_weights[1].to(device)
 
             advantages_list.append(advantages)
 
@@ -411,9 +424,9 @@ class XGRPOTrainerMDP(GRPOTrainer):
                     last_advantage_pos = 0
                     for j, advantage in enumerate(advantages):
                         if advantage != advantages[last_advantage_pos]:
-                            print(f"In the {last_advantage_pos} to {j-1} tokens, the advantage is {advantages[last_advantage_pos]}.")
+                            print(f"In the {last_advantage_pos} to {j} tokens, the advantage is {advantages[last_advantage_pos]}.")
                             decoded_segment = self.processing_class.decode(
-                                completion_ids[i][last_advantage_pos:j-1], skip_special_tokens=True
+                                completion_ids[i][last_advantage_pos:j], skip_special_tokens=True
                             )
                             print("In that position, the decoded completion is:")
                             print(decoded_segment)
@@ -430,7 +443,7 @@ class XGRPOTrainerMDP(GRPOTrainer):
                         print(f"The format reward for this completion is {rewards_per_func[i][1].item()}.")
                     print('*' * 100)
 
-        advantages_list = torch.tensor(advantages_list, device=device, dtype=torch.bfloat16) * self.reward_weights[0].to(device)
+        advantages_list = torch.stack(advantages_list).to(device=device, dtype=torch.bfloat16)
 
         return {
             "prompt_ids": prompt_ids,

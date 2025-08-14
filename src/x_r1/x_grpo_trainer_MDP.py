@@ -117,15 +117,15 @@ class XGRPOTrainerMDP(GRPOTrainer):
         # Determine whether to use tag in response
         self.tag = args.tag
         # Determine number of questions per step
-        self.num_questions_per_step = self.args.per_device_train_batch_size * self.accelerator.num_processes // self.num_generations
-        if self.num_questions_per_step * args.extra_generations % self.accelerator.num_processes != 0:
+        self.num_questions_per_batch = self.args.per_device_train_batch_size * self.accelerator.num_processes // self.num_generations
+        if self.num_questions_per_batch * args.extra_generations % self.accelerator.num_processes != 0:
             raise ValueError(
-                f"Number of prompts ({self.num_questions_per_step}) times extra generations ({args.extra_generations}) "
+                f"Number of prompts ({self.num_questions_per_batch}) times extra generations ({args.extra_generations}) "
                 f"must be divisible by the number of processes ({self.accelerator.num_processes})."
             )
-        if self.num_questions_per_step > self.accelerator.num_processes:
+        if self.num_questions_per_batch > self.accelerator.num_processes:
             raise ValueError(
-                f"Number of questions ({self.num_questions_per_step}) per step must be less than or equal to the number of processes ({self.accelerator.num_processes})."
+                f"Number of questions ({self.num_questions_per_batch}) per step must be less than or equal to the number of processes ({self.accelerator.num_processes})."
             )
         if args.extra_generations % self.num_generations != 0:
             raise ValueError(
@@ -181,11 +181,12 @@ class XGRPOTrainerMDP(GRPOTrainer):
             all_prompts_text = gather_object(prompts_text)
             if self.accelerator.is_main_process:
                 # Check if we need to save the tree
-                if (self.state.global_step/self.num_iterations) * self.num_questions_per_step // len(self.train_dataset) > self.last_tree_save:
-                    self.last_tree_save = (self.state.global_step/self.num_iterations) * self.num_questions_per_step // len(self.train_dataset)
+                if (self.state.global_step/self.num_iterations) * self.num_questions_per_batch * self.args.gradient_accumulation_steps // len(self.train_dataset) > self.last_tree_save:
+                    self.last_tree_save = (self.state.global_step/self.num_iterations) * self.num_questions_per_batch * self.args.gradient_accumulation_steps // len(self.train_dataset)
                     tree_dict_to_save = []
                     for item in self.train_dataset:
                         item['MDP_tree'] = self.tree_dict[item['id']].__repr__()
+                        tree_dict_to_save.append(item)
                     # Open a json file in self.args.output_dir and save the tree_dict
                     with open(f"{self.args.output_dir}/tree_dict_{self.last_tree_save}.json", "w") as f:
                         json.dump(tree_dict_to_save, f)
@@ -194,7 +195,7 @@ class XGRPOTrainerMDP(GRPOTrainer):
                 if self.quick_eval_dataset is not None and (self.state.global_step/self.num_iterations) % self.args.eval_steps == 1:
                     self.run_quick_eval = True
                 # perform quick eval with the quick eval dataset if step is a multiple of eval_steps
-                if self.quick_eval_dataset is not None and (self.state.global_step/self.num_iterations) % self.args.eval_steps == 0 and self.run_quick_eval:
+                if (self.quick_eval_dataset is not None and (self.state.global_step/self.num_iterations) % self.args.eval_steps == 0 and self.run_quick_eval) or self.state.global_step == 0:
                     quick_eval_outputs = self.llm.generate(
                         [x["prompt"] for x in self.quick_eval_dataset],
                         sampling_params=SamplingParams(
@@ -242,7 +243,7 @@ class XGRPOTrainerMDP(GRPOTrainer):
             # corresponding slice.
             completion_ids = broadcast_object_list(completion_ids, from_process=0)
             # With extra generations, we need to slice the completions to match the actual number of generations.
-            per_process_partition = self.num_questions_per_step * self.args.extra_generations // self.accelerator.num_processes
+            per_process_partition = self.num_questions_per_batch * self.args.extra_generations // self.accelerator.num_processes
             process_slice = slice(
                 self.accelerator.process_index * per_process_partition,
                 (self.accelerator.process_index + 1) * per_process_partition,

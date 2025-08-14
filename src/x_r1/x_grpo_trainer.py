@@ -186,7 +186,7 @@ class XGRPOTrainer(GRPOTrainer):
                 if self.quick_eval_dataset is not None and (self.state.global_step/self.num_iterations) % self.args.eval_steps == 1:
                     self.run_quick_eval = True
                 # perform quick eval with the quick eval dataset if step is a multiple of eval_steps
-                if self.quick_eval_dataset is not None and (self.state.global_step/self.num_iterations) % self.args.eval_steps == 0 and self.run_quick_eval:
+                if (self.quick_eval_dataset is not None and (self.state.global_step/self.num_iterations) % self.args.eval_steps == 0 and self.run_quick_eval) or self.state.global_step == 0:
                     quick_eval_outputs = self.llm.generate(
                         [x["prompt"] for x in self.quick_eval_dataset],
                         sampling_params=SamplingParams(

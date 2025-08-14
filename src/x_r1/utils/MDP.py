@@ -360,10 +360,10 @@ def thinking_parse(
     except Exception as e:
         # Log the exception if any error occurs during parsing
         logger.exception(f"Error parsing: {pred}, error: {e}")
-        return []
+        return [], []
     except TimeoutException:
         logger.error(f"Timeout during parsing: {pred}")
-        return []
+        return [], []
 
 
 def extract_target_from_pred(

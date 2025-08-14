@@ -31,7 +31,7 @@ from rewards import (
     format_reward
 )
 from utils.callbacks import get_callbacks
-from utils.prepare_dataset import prepare_dataset, prepare_quick_eval_dataset, SYSTEM_PROMPT_TAG
+from utils.prepare_dataset import prepare_dataset, prepare_quick_eval_dataset
 from utils.wandb_logging import init_wandb_training
 from x_grpo_trainer_MDP import XGRPOTrainerMDP
 from trl import ModelConfig, TrlParser, get_peft_config
